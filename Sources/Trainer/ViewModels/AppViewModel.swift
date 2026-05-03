@@ -12,9 +12,12 @@ final class AppViewModel: ObservableObject {
     @Published var statusMessage = "Simulation mode ready"
     @Published var trainerSource: DeviceSource = .simulation
     @Published var heartRateSource: DeviceSource = .simulation
+    @Published var athleteProfile: AthleteProfile
     @Published var isUploadingToStrava = false
     @Published var isConnectingStrava = false
     @Published var isStravaConnected = false
+
+    private static let athleteProfileDefaultsKey = "trainer.athleteProfile"
 
     private let simulationBluetoothManager: MockBluetoothManager
     private let bluetoothManager: CoreBluetoothManager
@@ -25,18 +28,21 @@ final class AppViewModel: ObservableObject {
     private var heartRateService: any HeartRateServicing
 
     init() {
+        let athleteProfile = Self.loadAthleteProfile()
         let libraryStore = WorkoutLibraryStore()
         var workouts = libraryStore.loadWorkouts()
         if workouts.isEmpty {
-            workouts = [Workout.sample()]
+            workouts = [Workout.sample(ftp: athleteProfile.ftp)]
             try? libraryStore.saveWorkouts(workouts)
         }
 
-        let workout = workouts.first ?? Workout.sample()
+        var workout = workouts.first ?? Workout.sample(ftp: athleteProfile.ftp)
+        workout.ftp = athleteProfile.ftp
         let trainer = MockTrainerService()
         let heartRate = MockHeartRateService()
         let recorder = DataRecorder()
 
+        self.athleteProfile = athleteProfile
         self.workouts = workouts
         self.selectedWorkoutID = workout.id
         self.workout = workout
@@ -164,7 +170,7 @@ final class AppViewModel: ObservableObject {
             }
 
             let data = try Data(contentsOf: url)
-            let importedWorkout = try parser.parseWorkout(from: data, ftp: workout.ftp)
+            let importedWorkout = try parser.parseWorkout(from: data, ftp: athleteProfile.ftp)
             addWorkout(importedWorkout)
             selectWorkout(importedWorkout)
             statusMessage = "Imported and saved \(importedWorkout.name)"
@@ -174,10 +180,22 @@ final class AppViewModel: ObservableObject {
     }
 
     func selectWorkout(_ selected: Workout) {
-        guard workout.id != selected.id else { return }
-        selectedWorkoutID = selected.id
-        replaceWorkout(selected)
-        statusMessage = "Loaded \(selected.name)"
+        var selectedWorkout = selected
+        selectedWorkout.ftp = athleteProfile.ftp
+
+        guard workout.id != selectedWorkout.id || workout.ftp != selectedWorkout.ftp else { return }
+        workouts = workouts.map { $0.id == selectedWorkout.id ? selectedWorkout : $0 }
+        try? libraryStore.saveWorkouts(workouts)
+        selectedWorkoutID = selectedWorkout.id
+        replaceWorkout(selectedWorkout)
+        statusMessage = "Loaded \(selectedWorkout.name)"
+    }
+
+    func updateAthleteProfile(_ profile: AthleteProfile) {
+        let previousFTP = athleteProfile.ftp
+        athleteProfile = profile.sanitized
+        saveAthleteProfile()
+        applyAthleteFTPToCurrentWorkout(previousFTP: previousFTP)
     }
 
     func exportCSV() {
@@ -290,6 +308,35 @@ final class AppViewModel: ObservableObject {
         ]
         .compactMap { $0 }
         .joined(separator: "\n\n")
+    }
+
+    private static func loadAthleteProfile() -> AthleteProfile {
+        guard let data = UserDefaults.standard.data(forKey: athleteProfileDefaultsKey),
+              let profile = try? JSONDecoder().decode(AthleteProfile.self, from: data) else {
+            return AthleteProfile()
+        }
+        return profile.sanitized
+    }
+
+    private func saveAthleteProfile() {
+        guard let data = try? JSONEncoder().encode(athleteProfile) else { return }
+        UserDefaults.standard.set(data, forKey: Self.athleteProfileDefaultsKey)
+    }
+
+    private func applyAthleteFTPToCurrentWorkout(previousFTP: Int) {
+        guard athleteProfile.ftp != previousFTP else { return }
+
+        guard engine.state == .stopped || engine.state == .finished else {
+            statusMessage = "FTP saved. It will apply to workout targets after this ride."
+            return
+        }
+
+        var updatedWorkout = workout
+        updatedWorkout.ftp = athleteProfile.ftp
+        workouts = workouts.map { $0.id == updatedWorkout.id ? updatedWorkout : $0 }
+        try? libraryStore.saveWorkouts(workouts)
+        replaceWorkout(updatedWorkout)
+        statusMessage = "FTP updated to \(athleteProfile.ftp) W"
     }
 }
 

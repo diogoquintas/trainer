@@ -6,7 +6,7 @@ struct SidePanelView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            CockpitStatusBlock(engine: engine)
+            CockpitStatusBlock(engine: engine, profile: viewModel.athleteProfile)
 
             Divider()
                 .overlay(.white.opacity(0.14))
@@ -108,6 +108,7 @@ struct SidePanelView: View {
 
 private struct CockpitStatusBlock: View {
     @ObservedObject var engine: WorkoutEngine
+    let profile: AthleteProfile
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -133,7 +134,39 @@ private struct CockpitStatusBlock: View {
                     .font(.system(size: 15, weight: .bold, design: .rounded))
                     .foregroundStyle(.white.opacity(0.56))
             }
+
+            HStack(spacing: 8) {
+                ProfileBadge(title: "FTP", value: "\(profile.ftp)", unit: "W", color: .orange)
+                ProfileBadge(title: "HRT", value: "\(profile.thresholdHeartRateBPM)", unit: "bpm", color: .red)
+            }
         }
+    }
+}
+
+private struct ProfileBadge: View {
+    let title: String
+    let value: String
+    let unit: String
+    let color: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title)
+                .font(.system(size: 10, weight: .black, design: .rounded))
+                .foregroundStyle(.white.opacity(0.46))
+            HStack(alignment: .lastTextBaseline, spacing: 3) {
+                Text(value)
+                    .font(.system(size: 20, weight: .black, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(color)
+                Text(unit)
+                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.48))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(9)
+        .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 8))
     }
 }
 

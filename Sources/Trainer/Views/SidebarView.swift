@@ -50,6 +50,10 @@ struct SidebarView: View {
 
             Divider()
 
+            AthleteStatsView()
+
+            Divider()
+
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     Text("Workouts")
@@ -86,6 +90,133 @@ struct SidebarView: View {
         }
         .padding(20)
         .background(Color(nsColor: .controlBackgroundColor))
+    }
+}
+
+private struct AthleteStatsView: View {
+    @EnvironmentObject private var viewModel: AppViewModel
+    @State private var draftProfile = AthleteProfile()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Athlete Stats")
+                    .font(.headline)
+                Spacer()
+                Text(String(format: "%.1f W/kg", draftProfile.wattsPerKilogram))
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+
+            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
+                GridRow {
+                    StatIntegerField(title: "FTP", suffix: "W", value: $draftProfile.ftp)
+                    StatIntegerField(title: "HRT", suffix: "bpm", value: $draftProfile.thresholdHeartRateBPM)
+                        .help("Heart-rate threshold")
+                }
+                GridRow {
+                    StatIntegerField(title: "HRM", suffix: "bpm", value: $draftProfile.maxHeartRateBPM)
+                        .help("Maximum heart rate")
+                    StatIntegerField(title: "Rest", suffix: "bpm", value: $draftProfile.restingHeartRateBPM)
+                }
+                GridRow {
+                    StatDoubleField(title: "Weight", suffix: "kg", value: $draftProfile.weightKg)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Difficulty")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                        HStack(spacing: 8) {
+                            Slider(
+                                value: Binding(
+                                    get: { Double(draftProfile.trainerDifficultyPercent) },
+                                    set: { draftProfile.trainerDifficultyPercent = Int($0.rounded()) }
+                                ),
+                                in: 0...100,
+                                step: 5
+                            )
+                            Text("\(draftProfile.trainerDifficultyPercent)%")
+                                .font(.caption.monospacedDigit())
+                                .foregroundStyle(.secondary)
+                                .frame(width: 36, alignment: .trailing)
+                        }
+                    }
+                }
+            }
+
+            HStack {
+                Button {
+                    draftProfile = viewModel.athleteProfile
+                } label: {
+                    Label("Revert", systemImage: "arrow.uturn.backward")
+                }
+                .disabled(draftProfile == viewModel.athleteProfile)
+
+                Spacer()
+
+                Button {
+                    viewModel.updateAthleteProfile(draftProfile)
+                    draftProfile = viewModel.athleteProfile
+                } label: {
+                    Label("Save", systemImage: "checkmark")
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(draftProfile == viewModel.athleteProfile)
+            }
+            .controlSize(.small)
+        }
+        .onAppear {
+            draftProfile = viewModel.athleteProfile
+        }
+        .onChange(of: viewModel.athleteProfile) { _, profile in
+            guard draftProfile == profile else { return }
+            draftProfile = profile
+        }
+    }
+}
+
+private struct StatIntegerField: View {
+    let title: String
+    let suffix: String
+    @Binding var value: Int
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+            HStack(spacing: 6) {
+                TextField(title, value: $value, format: .number)
+                    .textFieldStyle(.roundedBorder)
+                    .monospacedDigit()
+                    .frame(width: 58)
+                Text(suffix)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+private struct StatDoubleField: View {
+    let title: String
+    let suffix: String
+    @Binding var value: Double
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+            HStack(spacing: 6) {
+                TextField(title, value: $value, format: .number.precision(.fractionLength(1)))
+                    .textFieldStyle(.roundedBorder)
+                    .monospacedDigit()
+                    .frame(width: 58)
+                Text(suffix)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
     }
 }
 
