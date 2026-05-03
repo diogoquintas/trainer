@@ -56,6 +56,29 @@ struct SidePanelView: View {
                     }
                 }
                 .disabled(engine.samples.isEmpty)
+
+                Button {
+                    Task {
+                        await viewModel.connectStrava()
+                    }
+                } label: {
+                    Label(
+                        viewModel.isStravaConnected ? "CONNECTED" : (viewModel.isConnectingStrava ? "CONNECTING" : "CONNECT"),
+                        systemImage: viewModel.isStravaConnected ? "checkmark.circle.fill" : "person.crop.circle.badge.plus"
+                    )
+                    .frame(maxWidth: .infinity)
+                }
+                .disabled(viewModel.isStravaConnected || viewModel.isConnectingStrava)
+
+                Button {
+                    Task {
+                        await viewModel.uploadWorkoutToStrava()
+                    }
+                } label: {
+                    Label(viewModel.isUploadingToStrava ? "UPLOADING" : "STRAVA", systemImage: "arrow.up.circle.fill")
+                        .frame(maxWidth: .infinity)
+                }
+                .disabled(engine.samples.isEmpty || !viewModel.isStravaConnected || viewModel.isUploadingToStrava)
             }
         }
         .padding(18)

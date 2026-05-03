@@ -14,9 +14,9 @@ The app starts in simulation mode, and can also connect to Bluetooth LE fitness 
 - `.zwo` parser for common Zwift workout elements
 - ERG target handoff through a `TrainerServicing` protocol
 - Three Apple Charts views for HR, cadence, and power actual-vs-target
-- CSV and JSON export of recorded workout samples
+- CSV, JSON, and TCX export of recorded workout samples
+- Strava OAuth connection and indoor ride upload from the finished workout samples
 - Industry-style cadence split: live values and chart buffer update at 10 Hz while activity samples are recorded/exported at 1 Hz
-- Placeholder `StravaServicing` protocol for future OAuth/upload work
 
 ## Run
 
@@ -32,6 +32,25 @@ On first Bluetooth scan, macOS may ask for Bluetooth permission. The generated l
 
 ```bash
 swift build
+```
+
+## Strava Uploads
+
+Create a Strava API application at <https://www.strava.com/settings/api>, then store the app credentials in macOS defaults before running the app:
+
+```bash
+defaults write local.personal.Trainer strava.clientID "YOUR_CLIENT_ID"
+defaults write local.personal.Trainer strava.clientSecret "YOUR_CLIENT_SECRET"
+```
+
+Set the Strava app's **Authorization Callback Domain** to `localhost`. In the app, finish or stop a workout after samples have been recorded, click **CONNECT** in the export panel, authorize `activity:write`, then click **STRAVA**. The app generates a TCX file, marks it as a trainer activity, refreshes the Strava access token when needed, and stores the latest refresh token in user defaults.
+
+For local command-line runs you can also provide:
+
+```bash
+export STRAVA_CLIENT_ID="YOUR_CLIENT_ID"
+export STRAVA_CLIENT_SECRET="YOUR_CLIENT_SECRET"
+export STRAVA_REFRESH_TOKEN="OPTIONAL_EXISTING_REFRESH_TOKEN"
 ```
 
 ## Project Layout

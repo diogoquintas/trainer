@@ -39,8 +39,12 @@ protocol DataRecording {
     func samples() -> [WorkoutSample]
     func exportJSON() throws -> Data
     func exportCSV() throws -> String
+    func exportTCX(workout: Workout) throws -> Data
 }
 
 protocol StravaServicing {
-    func uploadActivity(fileURL: URL) async throws
+    var isConnected: Bool { get }
+
+    func connect() async throws
+    func uploadActivity(fileURL: URL, name: String, description: String?) async throws -> StravaUpload
 }

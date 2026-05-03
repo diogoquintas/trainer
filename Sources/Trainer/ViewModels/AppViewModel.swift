@@ -12,11 +12,15 @@ final class AppViewModel: ObservableObject {
     @Published var statusMessage = "Simulation mode ready"
     @Published var trainerSource: DeviceSource = .simulation
     @Published var heartRateSource: DeviceSource = .simulation
+    @Published var isUploadingToStrava = false
+    @Published var isConnectingStrava = false
+    @Published var isStravaConnected = false
 
     private let simulationBluetoothManager: MockBluetoothManager
     private let bluetoothManager: CoreBluetoothManager
     private let parser: WorkoutParsing
     private let libraryStore: WorkoutLibraryStore
+    private let stravaService: StravaServicing
     private var trainerService: any TrainerServicing
     private var heartRateService: any HeartRateServicing
 
@@ -48,6 +52,8 @@ final class AppViewModel: ObservableObject {
         self.heartRateService = heartRate
         self.parser = ZWOParser()
         self.libraryStore = libraryStore
+        self.stravaService = StravaService()
+        self.isStravaConnected = self.stravaService.isConnected
     }
 
     var trainerConnectionText: String {
@@ -204,6 +210,52 @@ final class AppViewModel: ObservableObject {
         }
     }
 
+    func connectStrava() async {
+        guard !isConnectingStrava else { return }
+        isConnectingStrava = true
+        statusMessage = "Connecting to Strava..."
+        defer { isConnectingStrava = false }
+
+        do {
+            try await stravaService.connect()
+            isStravaConnected = stravaService.isConnected
+            statusMessage = "Connected to Strava"
+        } catch {
+            statusMessage = "Strava connection failed: \(error.localizedDescription)"
+        }
+    }
+
+    func uploadWorkoutToStrava() async {
+        guard !isUploadingToStrava else { return }
+        isUploadingToStrava = true
+        statusMessage = "Uploading \(workout.name) to Strava..."
+        defer { isUploadingToStrava = false }
+
+        do {
+            let fileURL = FileManager.default.temporaryDirectory
+                .appendingPathComponent("\(workout.name.safeFilename)-\(UUID().uuidString).tcx")
+            try engine.exportTCX().write(to: fileURL, options: .atomic)
+            defer { try? FileManager.default.removeItem(at: fileURL) }
+
+            let upload = try await stravaService.uploadActivity(
+                fileURL: fileURL,
+                name: workout.name,
+                description: stravaDescription
+            )
+            isStravaConnected = stravaService.isConnected
+
+            if let error = upload.error, !error.isEmpty {
+                statusMessage = "Strava is processing the upload but reported: \(error)"
+            } else if let activityID = upload.activityID {
+                statusMessage = "Uploaded to Strava activity \(activityID)"
+            } else {
+                statusMessage = upload.status.map { "Strava upload queued: \($0)" } ?? "Strava upload queued"
+            }
+        } catch {
+            statusMessage = "Strava upload failed: \(error.localizedDescription)"
+        }
+    }
+
     private func replaceWorkout(_ newWorkout: Workout) {
         engine.stop()
         workout = newWorkout
@@ -229,6 +281,15 @@ final class AppViewModel: ObservableObject {
         } catch {
             statusMessage = "Workout imported but saving failed: \(error.localizedDescription)"
         }
+    }
+
+    private var stravaDescription: String {
+        [
+            workout.description,
+            "Uploaded from Trainer."
+        ]
+        .compactMap { $0 }
+        .joined(separator: "\n\n")
     }
 }
 

@@ -104,6 +104,10 @@ final class WorkoutEngine: ObservableObject {
         try recorder.exportCSV()
     }
 
+    func exportTCX() throws -> Data {
+        try recorder.exportTCX(workout: workout)
+    }
+
     func replaceTrainerService(_ service: TrainerServicing) {
         trainerTask?.cancel()
         trainerTask = nil
