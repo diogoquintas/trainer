@@ -278,6 +278,7 @@ final class AppViewModel: ObservableObject {
         defer { isUploadingToStrava = false }
 
         do {
+            _ = try? renderStravaSummaryImage()
             let fileURL = FileManager.default.temporaryDirectory
                 .appendingPathComponent("\(workout.name.safeFilename)-\(UUID().uuidString).tcx")
             try engine.exportTCX().write(to: fileURL, options: .atomic)
@@ -351,6 +352,28 @@ final class AppViewModel: ObservableObject {
         .joined(separator: "\n\n")
     }
 
+    private func renderStravaSummaryImage() throws -> URL {
+        let imageData = try WorkoutSummaryImageRenderer.renderPNG(workout: workout, samples: engine.samples)
+        let directoryURL = try stravaSummaryImageDirectory()
+        let imageURL = directoryURL
+            .appendingPathComponent("\(workout.name.safeFilename)-strava-summary-\(Self.exportDateFormatter.string(from: Date())).png")
+        try imageData.write(to: imageURL, options: .atomic)
+
+        return imageURL
+    }
+
+    private func stravaSummaryImageDirectory() throws -> URL {
+        let documentsURL = try FileManager.default.url(
+            for: .documentDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        )
+        let directoryURL = documentsURL.appendingPathComponent("trainer", isDirectory: true)
+        try FileManager.default.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+        return directoryURL
+    }
+
     private var formattedTrainerCommunicationLog: String {
         guard !trainerCommunicationLog.isEmpty else { return "Trainer communication log is empty." }
         return trainerCommunicationLog.map { entry in
@@ -369,6 +392,12 @@ final class AppViewModel: ObservableObject {
     private static let logDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "HH:mm:ss.SSS"
+        return formatter
+    }()
+
+    private static let exportDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
         return formatter
     }()
 

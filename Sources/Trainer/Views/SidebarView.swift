@@ -6,12 +6,13 @@ struct SidebarView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                Image(systemName: "figure.indoor.cycle")
+                    .font(.title3)
+                    .foregroundStyle(.orange)
                 Text("Trainer")
                     .font(.title2.bold())
-                Text(viewModel.statusMessage)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+                Spacer()
             }
 
             Divider()
