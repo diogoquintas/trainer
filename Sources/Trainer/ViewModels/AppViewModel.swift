@@ -201,6 +201,50 @@ final class AppViewModel: ObservableObject {
         statusMessage = "Loaded \(selectedWorkout.name)"
     }
 
+    func selectWorkout(id: Workout.ID) {
+        guard let selected = workouts.first(where: { $0.id == id }) else {
+            selectedWorkoutID = workout.id
+            return
+        }
+
+        selectWorkout(selected)
+    }
+
+    func removeSelectedWorkout() {
+        removeWorkout(id: selectedWorkoutID)
+    }
+
+    func removeWorkout(id: Workout.ID) {
+        guard let removedIndex = workouts.firstIndex(where: { $0.id == id }) else { return }
+
+        let previousWorkouts = workouts
+        let removedWorkout = workouts[removedIndex]
+        workouts.remove(at: removedIndex)
+
+        if workouts.isEmpty {
+            workouts = [Workout.sample(ftp: athleteProfile.ftp)]
+        }
+
+        do {
+            try libraryStore.saveWorkouts(workouts)
+        } catch {
+            statusMessage = "Removing \(removedWorkout.name) failed: \(error.localizedDescription)"
+            workouts = previousWorkouts
+            selectedWorkoutID = workout.id
+            return
+        }
+
+        if workout.id == id || !workouts.contains(where: { $0.id == selectedWorkoutID }) {
+            let replacementIndex = min(removedIndex, workouts.count - 1)
+            var replacement = workouts[replacementIndex]
+            replacement.ftp = athleteProfile.ftp
+            workouts[replacementIndex] = replacement
+            replaceWorkout(replacement)
+        }
+
+        statusMessage = "Removed \(removedWorkout.name)"
+    }
+
     func updateAthleteProfile(_ profile: AthleteProfile) {
         let previousFTP = athleteProfile.ftp
         athleteProfile = profile.sanitized

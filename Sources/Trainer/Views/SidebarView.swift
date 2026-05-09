@@ -61,6 +61,12 @@ struct SidebarView: View {
                         .font(.headline)
                     Spacer()
                     Button {
+                        viewModel.removeSelectedWorkout()
+                    } label: {
+                        Image(systemName: "minus")
+                    }
+                    .help("Remove selected workout")
+                    Button {
                         isImporting = true
                     } label: {
                         Image(systemName: "plus")
@@ -73,18 +79,23 @@ struct SidebarView: View {
                         WorkoutLibraryRow(workout: workout)
                             .tag(workout.id)
                             .contentShape(Rectangle())
-                            .onTapGesture {
-                                viewModel.selectWorkout(workout)
+                            .contextMenu {
+                                Button(role: .destructive) {
+                                    viewModel.removeWorkout(id: workout.id)
+                                } label: {
+                                    Label("Remove", systemImage: "trash")
+                                }
                             }
                     }
                 }
                 .frame(minHeight: 190)
-
-                Button {
-                    isImporting = true
-                } label: {
-                    Label("Import .zwo", systemImage: "square.and.arrow.down")
+                .onChange(of: viewModel.selectedWorkoutID) { _, workoutID in
+                    viewModel.selectWorkout(id: workoutID)
                 }
+                .onDeleteCommand {
+                    viewModel.removeSelectedWorkout()
+                }
+
             }
 
             Spacer()
