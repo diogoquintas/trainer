@@ -10,10 +10,17 @@ final class WorkoutEngine: ObservableObject {
     @Published private(set) var latestHeartRateReading: HeartRateReading?
     @Published private(set) var samples: [WorkoutSample] = []
     @Published private(set) var chartSamples: [WorkoutSample] = []
+    @Published private(set) var trainerControlMode: TrainerControlMode
+    @Published private(set) var currentResistanceLevel: Double?
+    @Published private(set) var currentVirtualGear: Int
+    @Published private(set) var isERGControlActive = false
 
     let workout: Workout
+    static let virtualGearRange = 1...10
+
     private let engineInterval: TimeInterval = 0.1
     private let recordingInterval: TimeInterval = 1
+    private let minimumCadenceForERG = 35
     private let maximumChartSamples = 1_800
     private var trainerService: TrainerServicing
     private var heartRateService: HeartRateServicing
@@ -21,19 +28,25 @@ final class WorkoutEngine: ObservableObject {
     private var trainerTask: Task<Void, Never>?
     private var heartRateTask: Task<Void, Never>?
     private var tickTask: Task<Void, Never>?
-    private var lastERGTarget: Int?
+    private var lastTrainerCommand: TrainerCommand?
+    private var manualVirtualGear: Int
     private var nextRecordingElapsed: TimeInterval = 0
 
     init(
         workout: Workout,
         trainerService: TrainerServicing,
         heartRateService: HeartRateServicing,
-        recorder: DataRecording
+        recorder: DataRecording,
+        trainerControlMode: TrainerControlMode = .erg,
+        manualVirtualGear: Int = 3
     ) {
         self.workout = workout
         self.trainerService = trainerService
         self.heartRateService = heartRateService
         self.recorder = recorder
+        self.trainerControlMode = trainerControlMode
+        self.manualVirtualGear = manualVirtualGear.clamped(to: Self.virtualGearRange)
+        self.currentVirtualGear = manualVirtualGear.clamped(to: Self.virtualGearRange)
         updateStep(for: 0, forceERGUpdate: true)
     }
 
@@ -56,7 +69,8 @@ final class WorkoutEngine: ObservableObject {
         chartSamples = []
         elapsed = 0
         state = .running
-        lastERGTarget = nil
+        lastTrainerCommand = nil
+        isERGControlActive = false
         nextRecordingElapsed = 0
         updateStep(for: elapsed, forceERGUpdate: true)
         recordSample()
@@ -80,19 +94,23 @@ final class WorkoutEngine: ObservableObject {
         state = .stopped
         elapsed = 0
         currentStepIndex = nil
+        isERGControlActive = false
         cancelTasks()
         Task {
             await trainerService.stop()
             await heartRateService.stop()
+            try? await trainerService.releaseControl()
         }
     }
 
     func finish() {
         state = .finished
+        isERGControlActive = false
         cancelTasks()
         Task {
             await trainerService.stop()
             await heartRateService.stop()
+            try? await trainerService.releaseControl()
         }
     }
 
@@ -113,11 +131,12 @@ final class WorkoutEngine: ObservableObject {
         trainerTask = nil
         let previousService = trainerService
         trainerService = service
-        lastERGTarget = nil
+        lastTrainerCommand = nil
         updateStep(for: elapsed, forceERGUpdate: true)
         if previousService !== service {
             Task {
                 await previousService.stop()
+                try? await previousService.releaseControl()
             }
         }
         if state == .running || state == .paused {
@@ -140,6 +159,28 @@ final class WorkoutEngine: ObservableObject {
         }
     }
 
+    func setTrainerControlMode(_ mode: TrainerControlMode) {
+        guard trainerControlMode != mode else { return }
+        trainerControlMode = mode
+        lastTrainerCommand = nil
+
+        if mode == .off {
+            currentResistanceLevel = nil
+            Task {
+                try? await trainerService.releaseControl()
+            }
+        } else {
+            updateStep(for: elapsed, forceERGUpdate: true)
+        }
+    }
+
+    func setManualVirtualGear(_ gear: Int) {
+        manualVirtualGear = gear.clamped(to: Self.virtualGearRange)
+        guard trainerControlMode == .resistance else { return }
+        lastTrainerCommand = nil
+        updateStep(for: elapsed, forceERGUpdate: true)
+    }
+
     private func beginStreams() {
         beginTrainerStream()
         beginHeartRateStream()
@@ -153,6 +194,7 @@ final class WorkoutEngine: ObservableObject {
                 guard !Task.isCancelled else { break }
                 await MainActor.run {
                     self.latestTrainerReading = reading
+                    self.updateERGControlReadiness(for: reading)
                 }
             }
         }
@@ -213,13 +255,70 @@ final class WorkoutEngine: ObservableObject {
         }
 
         currentStepIndex = resolvedIndex
-        guard let targetWatts = currentTarget.resolvedPowerWatts(ftp: workout.ftp) else { return }
-        guard forceERGUpdate || targetWatts != lastERGTarget else { return }
-        lastERGTarget = targetWatts
+        currentVirtualGear = virtualGear()
+        guard let command = trainerCommand() else {
+            currentResistanceLevel = nil
+            if trainerControlMode == .off {
+                Task {
+                    try? await trainerService.releaseControl()
+                }
+            }
+            return
+        }
+        guard forceERGUpdate || command != lastTrainerCommand else { return }
+        lastTrainerCommand = command
 
         Task {
-            try? await trainerService.setERGTarget(watts: targetWatts)
+            switch command {
+            case .erg(let watts):
+                currentResistanceLevel = nil
+                try? await trainerService.setERGTarget(watts: watts)
+            case .resistance(let level):
+                currentResistanceLevel = level
+                try? await trainerService.setResistanceLevel(level)
+            }
         }
+    }
+
+    private func trainerCommand() -> TrainerCommand? {
+        switch trainerControlMode {
+        case .erg:
+            guard isERGControlActive else { return nil }
+            guard let targetWatts = currentTarget.resolvedPowerWatts(ftp: workout.ftp) else { return nil }
+            return .erg(targetWatts)
+        case .resistance:
+            return .resistance(resistanceLevel(for: manualVirtualGear))
+        case .off:
+            return nil
+        }
+    }
+
+    private func virtualGear() -> Int {
+        switch trainerControlMode {
+        case .erg:
+            guard let targetWatts = currentTarget.resolvedPowerWatts(ftp: workout.ftp), workout.ftp > 0 else {
+                return manualVirtualGear
+            }
+            let intensity = Double(targetWatts) / Double(workout.ftp)
+            return Int((intensity * 5).rounded()).clamped(to: Self.virtualGearRange)
+        case .resistance, .off:
+            return manualVirtualGear
+        }
+    }
+
+    private func resistanceLevel(for gear: Int) -> Double {
+        Double(gear.clamped(to: Self.virtualGearRange) - Self.virtualGearRange.lowerBound) * 2
+    }
+
+    private func updateERGControlReadiness(for reading: TrainerReading) {
+        guard trainerControlMode == .erg, state == .running else { return }
+
+        guard !isERGControlActive,
+              let cadenceRPM = reading.cadenceRPM,
+              cadenceRPM >= minimumCadenceForERG else { return }
+        isERGControlActive = true
+        lastTrainerCommand = nil
+        updateStep(for: elapsed, forceERGUpdate: true)
     }
 
     private func recordSampleIfNeeded(force: Bool = false) {
@@ -264,5 +363,16 @@ final class WorkoutEngine: ObservableObject {
         trainerTask = nil
         heartRateTask = nil
         tickTask = nil
+    }
+}
+
+private enum TrainerCommand: Equatable {
+    case erg(Int)
+    case resistance(Double)
+}
+
+private extension Comparable {
+    func clamped(to range: ClosedRange<Self>) -> Self {
+        min(max(self, range.lowerBound), range.upperBound)
     }
 }

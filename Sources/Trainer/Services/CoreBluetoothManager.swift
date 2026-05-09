@@ -14,6 +14,8 @@ final class CoreBluetoothManager: NSObject, ObservableObject, BluetoothManaging 
     private var scanTask: Task<Void, Never>?
     private var pendingConnections: [UUID: (DeviceKind, CheckedContinuation<Void, Error>)] = [:]
 
+    var trainerCommunicationHandler: ((TrainerCommunicationLogEntry) -> Void)?
+
     private(set) var connectedTrainerService: BluetoothTrainerService?
     private(set) var connectedHeartRateService: BluetoothHeartRateService?
 
@@ -202,7 +204,13 @@ extension CoreBluetoothManager: @preconcurrency CBCentralManagerDelegate {
         case .trainer:
             let device = discoveredDevices[.trainer]?.first { $0.id == peripheral.identifier }
                 ?? DeviceDescriptor(id: peripheral.identifier, name: peripheral.name ?? "Smart Trainer", kind: .trainer, source: .bluetooth)
-            let service = BluetoothTrainerService(device: device, peripheral: peripheral)
+            let service = BluetoothTrainerService(
+                device: device,
+                peripheral: peripheral,
+                logHandler: { [weak self] entry in
+                    self?.trainerCommunicationHandler?(entry)
+                }
+            )
             connectedTrainerService = service
             trainerConnectionState = .connected(device)
             service.discover()
@@ -265,6 +273,18 @@ extension CoreBluetoothManager: @preconcurrency CBPeripheralDelegate {
             connectedHeartRateService?.handleUpdatedValue(for: characteristic, error: error)
         }
     }
+
+    func peripheral(_ peripheral: CBPeripheral, didUpdateNotificationStateFor characteristic: CBCharacteristic, error: Error?) {
+        if connectedTrainerService?.peripheral.identifier == peripheral.identifier {
+            connectedTrainerService?.handleUpdatedNotificationState(for: characteristic, error: error)
+        }
+    }
+
+    func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
+        if connectedTrainerService?.peripheral.identifier == peripheral.identifier {
+            connectedTrainerService?.handleWrite(for: characteristic, error: error)
+        }
+    }
 }
 
 enum BluetoothDeviceError: LocalizedError {
@@ -285,6 +305,8 @@ enum BluetoothUUIDs {
     static let fitnessMachineService = CBUUID(string: "1826")
     static let fitnessMachineFeature = CBUUID(string: "2ACC")
     static let indoorBikeData = CBUUID(string: "2AD2")
+    static let supportedResistanceLevelRange = CBUUID(string: "2AD6")
+    static let supportedPowerRange = CBUUID(string: "2AD8")
     static let fitnessMachineControlPoint = CBUUID(string: "2AD9")
     static let cyclingPowerService = CBUUID(string: "1818")
     static let cyclingPowerMeasurement = CBUUID(string: "2A63")

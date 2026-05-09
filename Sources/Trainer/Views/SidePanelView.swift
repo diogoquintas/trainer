@@ -8,6 +8,14 @@ struct SidePanelView: View {
         VStack(alignment: .leading, spacing: 18) {
             CockpitStatusBlock(engine: engine, profile: viewModel.athleteProfile)
 
+            HStack(spacing: 10) {
+                WorkoutOptionsMenu(engine: engine)
+                    .environmentObject(viewModel)
+
+                ExportMenu(engine: engine)
+                    .environmentObject(viewModel)
+            }
+
             Divider()
                 .overlay(.white.opacity(0.14))
 
@@ -35,51 +43,6 @@ struct SidePanelView: View {
             ControlButtons(engine: engine)
 
             Spacer()
-
-            VStack(alignment: .leading, spacing: 10) {
-                Text("EXPORT")
-                    .font(.system(size: 13, weight: .black, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.48))
-                HStack {
-                    Button {
-                        viewModel.exportCSV()
-                    } label: {
-                        Label("CSV", systemImage: "tablecells")
-                            .frame(maxWidth: .infinity)
-                    }
-
-                    Button {
-                        viewModel.exportJSON()
-                    } label: {
-                        Label("JSON", systemImage: "curlybraces")
-                            .frame(maxWidth: .infinity)
-                    }
-                }
-                .disabled(engine.samples.isEmpty)
-
-                Button {
-                    Task {
-                        await viewModel.connectStrava()
-                    }
-                } label: {
-                    Label(
-                        viewModel.isStravaConnected ? "CONNECTED" : (viewModel.isConnectingStrava ? "CONNECTING" : "CONNECT"),
-                        systemImage: viewModel.isStravaConnected ? "checkmark.circle.fill" : "person.crop.circle.badge.plus"
-                    )
-                    .frame(maxWidth: .infinity)
-                }
-                .disabled(viewModel.isStravaConnected || viewModel.isConnectingStrava)
-
-                Button {
-                    Task {
-                        await viewModel.uploadWorkoutToStrava()
-                    }
-                } label: {
-                    Label(viewModel.isUploadingToStrava ? "UPLOADING" : "STRAVA", systemImage: "arrow.up.circle.fill")
-                        .frame(maxWidth: .infinity)
-                }
-                .disabled(engine.samples.isEmpty || !viewModel.isStravaConnected || viewModel.isUploadingToStrava)
-            }
         }
         .padding(18)
         .background(
@@ -103,6 +66,118 @@ struct SidePanelView: View {
         guard let index = engine.currentStepIndex, let step = engine.currentStep else { return 0 }
         let start = engine.workout.steps.prefix(index).reduce(0) { $0 + $1.duration }
         return min(1, max(0, (engine.elapsed - start) / step.duration))
+    }
+}
+
+private struct WorkoutOptionsMenu: View {
+    @EnvironmentObject private var viewModel: AppViewModel
+    @ObservedObject var engine: WorkoutEngine
+
+    var body: some View {
+        Menu {
+            Picker(
+                "Trainer Mode",
+                selection: Binding(
+                    get: { viewModel.trainerControlMode },
+                    set: { viewModel.setTrainerControlMode($0) }
+                )
+            ) {
+                ForEach(TrainerControlMode.allCases) { mode in
+                    Label(mode.displayName, systemImage: icon(for: mode))
+                        .tag(mode)
+                }
+            }
+            .pickerStyle(.inline)
+        } label: {
+            Label(viewModel.trainerControlMode.displayName, systemImage: icon(for: viewModel.trainerControlMode))
+                .font(.system(size: 13, weight: .bold, design: .rounded))
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
+                .frame(maxWidth: .infinity)
+        }
+        .menuStyle(.button)
+        .buttonStyle(CockpitMenuButtonStyle())
+        .help("Workout options")
+    }
+
+    private func icon(for mode: TrainerControlMode) -> String {
+        switch mode {
+        case .erg:
+            "bolt.fill"
+        case .resistance:
+            "dial.low.fill"
+        case .off:
+            "slash.circle"
+        }
+    }
+}
+
+private struct ExportMenu: View {
+    @EnvironmentObject private var viewModel: AppViewModel
+    @ObservedObject var engine: WorkoutEngine
+
+    var body: some View {
+        Menu {
+            Button {
+                viewModel.exportCSV()
+            } label: {
+                Label("Export CSV", systemImage: "tablecells")
+            }
+            .disabled(engine.samples.isEmpty)
+
+            Button {
+                viewModel.exportJSON()
+            } label: {
+                Label("Export JSON", systemImage: "curlybraces")
+            }
+            .disabled(engine.samples.isEmpty)
+
+            Divider()
+
+            Button {
+                Task {
+                    await viewModel.connectStrava()
+                }
+            } label: {
+                Label(
+                    viewModel.isStravaConnected ? "Strava Connected" : (viewModel.isConnectingStrava ? "Connecting Strava" : "Connect Strava"),
+                    systemImage: viewModel.isStravaConnected ? "checkmark.circle.fill" : "person.crop.circle.badge.plus"
+                )
+            }
+            .disabled(viewModel.isStravaConnected || viewModel.isConnectingStrava)
+
+            Button {
+                Task {
+                    await viewModel.uploadWorkoutToStrava()
+                }
+            } label: {
+                Label(viewModel.isUploadingToStrava ? "Uploading to Strava" : "Upload to Strava", systemImage: "arrow.up.circle.fill")
+            }
+            .disabled(engine.samples.isEmpty || !viewModel.isStravaConnected || viewModel.isUploadingToStrava)
+
+            Divider()
+
+            Button {
+                viewModel.copyTrainerCommunicationLog()
+            } label: {
+                Label("Copy Trainer Log (\(viewModel.trainerCommunicationLog.count))", systemImage: "doc.on.doc")
+            }
+            .disabled(viewModel.trainerCommunicationLog.isEmpty)
+
+            Button {
+                viewModel.clearTrainerCommunicationLog()
+            } label: {
+                Label("Clear Trainer Log", systemImage: "trash")
+            }
+            .disabled(viewModel.trainerCommunicationLog.isEmpty)
+        } label: {
+            Label("Export", systemImage: "square.and.arrow.up")
+                .font(.system(size: 13, weight: .bold, design: .rounded))
+                .frame(maxWidth: .infinity)
+        }
+        .menuStyle(.button)
+        .buttonStyle(CockpitMenuButtonStyle())
+        .help("Export options")
     }
 }
 
@@ -192,6 +267,7 @@ private struct TimeBadge: View {
 }
 
 private struct ControlButtons: View {
+    @EnvironmentObject private var viewModel: AppViewModel
     @ObservedObject var engine: WorkoutEngine
 
     var body: some View {
@@ -199,6 +275,8 @@ private struct ControlButtons: View {
             Text("CONTROL")
                 .font(.system(size: 13, weight: .black, design: .rounded))
                 .foregroundStyle(.white.opacity(0.48))
+
+            VirtualGearControl(engine: engine)
 
             Button {
                 engine.start()
@@ -230,6 +308,89 @@ private struct ControlButtons: View {
             .buttonStyle(CockpitButtonStyle(color: .red))
             .disabled(engine.state == .stopped)
         }
+    }
+}
+
+private struct VirtualGearControl: View {
+    @EnvironmentObject private var viewModel: AppViewModel
+    @ObservedObject var engine: WorkoutEngine
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Button {
+                viewModel.shiftVirtualGear(by: -1)
+            } label: {
+                Image(systemName: "chevron.left")
+                    .frame(width: 30, height: 30)
+            }
+            .buttonStyle(GearButtonStyle())
+            .disabled(!canShiftDown)
+            .help("Shift down")
+
+            Text("\(engine.currentVirtualGear)")
+                .font(.system(size: 18, weight: .black, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity, minHeight: 30)
+                .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 8))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(.white.opacity(0.12), lineWidth: 1)
+                )
+
+            Button {
+                viewModel.shiftVirtualGear(by: 1)
+            } label: {
+                Image(systemName: "chevron.right")
+                    .frame(width: 30, height: 30)
+            }
+            .buttonStyle(GearButtonStyle())
+            .disabled(!canShiftUp)
+            .help("Shift up")
+        }
+        .frame(height: 34)
+        .opacity(viewModel.trainerControlMode == .off ? 0.72 : 1)
+    }
+
+    private var canShiftDown: Bool {
+        viewModel.trainerControlMode == .resistance && viewModel.manualVirtualGear > WorkoutEngine.virtualGearRange.lowerBound
+    }
+
+    private var canShiftUp: Bool {
+        viewModel.trainerControlMode == .resistance && viewModel.manualVirtualGear < WorkoutEngine.virtualGearRange.upperBound
+    }
+}
+
+private struct GearButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundStyle(isEnabled ? .white : .white.opacity(0.28))
+            .background(.white.opacity(backgroundOpacity(isPressed: configuration.isPressed)), in: RoundedRectangle(cornerRadius: 8))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(.white.opacity(isEnabled ? 0.12 : 0.06), lineWidth: 1)
+            )
+    }
+
+    private func backgroundOpacity(isPressed: Bool) -> Double {
+        guard isEnabled else { return 0.035 }
+        return isPressed ? 0.18 : 0.09
+    }
+}
+
+private struct CockpitMenuButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .padding(.horizontal, 10)
+            .padding(.vertical, 9)
+            .foregroundStyle(.white)
+            .background(.white.opacity(configuration.isPressed ? 0.16 : 0.09), in: RoundedRectangle(cornerRadius: 8))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(.white.opacity(0.12), lineWidth: 1)
+            )
     }
 }
 

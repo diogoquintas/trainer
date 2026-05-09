@@ -85,3 +85,23 @@ struct HeartRateReading: Equatable, Codable {
         self.bpm = bpm
     }
 }
+
+struct TrainerCommunicationLogEntry: Identifiable, Equatable {
+    enum Direction: String {
+        case event = "EVT"
+        case outgoing = "TX"
+        case incoming = "RX"
+        case error = "ERR"
+    }
+
+    let id = UUID()
+    let timestamp: Date
+    let direction: Direction
+    let message: String
+
+    init(timestamp: Date = Date(), direction: Direction, message: String) {
+        self.timestamp = timestamp
+        self.direction = direction
+        self.message = message
+    }
+}

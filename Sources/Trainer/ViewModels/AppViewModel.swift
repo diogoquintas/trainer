@@ -13,9 +13,12 @@ final class AppViewModel: ObservableObject {
     @Published var trainerSource: DeviceSource = .simulation
     @Published var heartRateSource: DeviceSource = .simulation
     @Published var athleteProfile: AthleteProfile
+    @Published var trainerControlMode: TrainerControlMode = .erg
+    @Published var manualVirtualGear: Int = 3
     @Published var isUploadingToStrava = false
     @Published var isConnectingStrava = false
     @Published var isStravaConnected = false
+    @Published var trainerCommunicationLog: [TrainerCommunicationLogEntry] = []
 
     private static let athleteProfileDefaultsKey = "trainer.athleteProfile"
 
@@ -50,7 +53,9 @@ final class AppViewModel: ObservableObject {
             workout: workout,
             trainerService: trainer,
             heartRateService: heartRate,
-            recorder: recorder
+            recorder: recorder,
+            trainerControlMode: .erg,
+            manualVirtualGear: 3
         )
         self.simulationBluetoothManager = MockBluetoothManager()
         self.bluetoothManager = CoreBluetoothManager()
@@ -60,6 +65,11 @@ final class AppViewModel: ObservableObject {
         self.libraryStore = libraryStore
         self.stravaService = StravaService()
         self.isStravaConnected = self.stravaService.isConnected
+        self.bluetoothManager.trainerCommunicationHandler = { [weak self] entry in
+            Task { @MainActor in
+                self?.appendTrainerCommunicationLog(entry)
+            }
+        }
     }
 
     var trainerConnectionText: String {
@@ -198,6 +208,24 @@ final class AppViewModel: ObservableObject {
         applyAthleteFTPToCurrentWorkout(previousFTP: previousFTP)
     }
 
+    func setTrainerControlMode(_ mode: TrainerControlMode) {
+        trainerControlMode = mode
+        engine.setTrainerControlMode(mode)
+        statusMessage = mode == .off ? "Trainer control off" : "\(mode.displayName) trainer control enabled"
+    }
+
+    func shiftVirtualGear(by offset: Int) {
+        setManualVirtualGear(manualVirtualGear + offset)
+    }
+
+    func setManualVirtualGear(_ gear: Int) {
+        manualVirtualGear = gear.clamped(to: WorkoutEngine.virtualGearRange)
+        engine.setManualVirtualGear(manualVirtualGear)
+        if trainerControlMode == .resistance {
+            statusMessage = "Virtual gear \(manualVirtualGear)"
+        }
+    }
+
     func exportCSV() {
         do {
             let panel = NSSavePanel()
@@ -274,6 +302,17 @@ final class AppViewModel: ObservableObject {
         }
     }
 
+    func copyTrainerCommunicationLog() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(formattedTrainerCommunicationLog, forType: .string)
+        statusMessage = "Copied trainer communication log"
+    }
+
+    func clearTrainerCommunicationLog() {
+        trainerCommunicationLog = []
+        statusMessage = "Cleared trainer communication log"
+    }
+
     private func replaceWorkout(_ newWorkout: Workout) {
         engine.stop()
         workout = newWorkout
@@ -287,7 +326,9 @@ final class AppViewModel: ObservableObject {
             workout: workout,
             trainerService: trainerService,
             heartRateService: heartRateService,
-            recorder: DataRecorder()
+            recorder: DataRecorder(),
+            trainerControlMode: trainerControlMode,
+            manualVirtualGear: manualVirtualGear
         )
     }
 
@@ -309,6 +350,27 @@ final class AppViewModel: ObservableObject {
         .compactMap { $0 }
         .joined(separator: "\n\n")
     }
+
+    private var formattedTrainerCommunicationLog: String {
+        guard !trainerCommunicationLog.isEmpty else { return "Trainer communication log is empty." }
+        return trainerCommunicationLog.map { entry in
+            "\(Self.logDateFormatter.string(from: entry.timestamp)) [\(entry.direction.rawValue)] \(entry.message)"
+        }
+        .joined(separator: "\n")
+    }
+
+    private func appendTrainerCommunicationLog(_ entry: TrainerCommunicationLogEntry) {
+        trainerCommunicationLog.append(entry)
+        if trainerCommunicationLog.count > 500 {
+            trainerCommunicationLog.removeFirst(trainerCommunicationLog.count - 500)
+        }
+    }
+
+    private static let logDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss.SSS"
+        return formatter
+    }()
 
     private static func loadAthleteProfile() -> AthleteProfile {
         guard let data = UserDefaults.standard.data(forKey: athleteProfileDefaultsKey),
@@ -344,5 +406,11 @@ private extension String {
     var safeFilename: String {
         let invalid = CharacterSet(charactersIn: "/\\?%*|\"<>:")
         return components(separatedBy: invalid).joined(separator: "-")
+    }
+}
+
+private extension Comparable {
+    func clamped(to range: ClosedRange<Self>) -> Self {
+        min(max(self, range.lowerBound), range.upperBound)
     }
 }

@@ -6,6 +6,7 @@ actor MockTrainerService: TrainerServicing {
     private let continuation: AsyncStream<TrainerReading>.Continuation
     private var task: Task<Void, Never>?
     private var targetWatts = 140
+    private var controlMode: TrainerControlMode = .erg
     private var currentPower = 120.0
     private var cadence = 84.0
 
@@ -38,7 +39,17 @@ actor MockTrainerService: TrainerServicing {
     }
 
     func setERGTarget(watts: Int) async throws {
+        controlMode = .erg
         targetWatts = watts
+    }
+
+    func setResistanceLevel(_ level: Double) async throws {
+        controlMode = .resistance
+        targetWatts = Int((level.clamped(to: 0...100) / 100 * 420).rounded())
+    }
+
+    func releaseControl() async throws {
+        controlMode = .off
     }
 
     private func emitReading() {
@@ -46,7 +57,7 @@ actor MockTrainerService: TrainerServicing {
         currentPower += powerDelta * 0.045
         currentPower += Double.random(in: -1.0...1.0)
 
-        let cadenceTarget = targetWatts > 210 ? 92.0 : targetWatts < 140 ? 82.0 : 88.0
+        let cadenceTarget = controlMode == .off ? 84.0 : (targetWatts > 210 ? 92.0 : targetWatts < 140 ? 82.0 : 88.0)
         cadence += (cadenceTarget - cadence) * 0.03
         cadence += Double.random(in: -0.25...0.25)
 
@@ -57,5 +68,11 @@ actor MockTrainerService: TrainerServicing {
                 speedMetersPerSecond: Double.random(in: 7.5...10.8)
             )
         )
+    }
+}
+
+private extension Comparable {
+    func clamped(to range: ClosedRange<Self>) -> Self {
+        min(max(self, range.lowerBound), range.upperBound)
     }
 }

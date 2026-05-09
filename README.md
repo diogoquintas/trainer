@@ -9,10 +9,10 @@ The app starts in simulation mode, and can also connect to Bluetooth LE fitness 
 - Simulated trainer and heart-rate services
 - Bluetooth discovery for FTMS/Cycling Power smart trainers and Heart Rate Service broadcasts
 - Live Bluetooth telemetry ingestion for power, cadence, speed, and heart rate where supported
-- Best-effort FTMS ERG target writes for compatible smart trainers
+- Best-effort FTMS ERG target-power and resistance-level writes for compatible smart trainers
 - Basic workout engine with start, pause, resume, stop, and finish states
 - `.zwo` parser for common Zwift workout elements
-- ERG target handoff through a `TrainerServicing` protocol
+- ERG, resistance, and off trainer-control modes through a `TrainerServicing` protocol
 - Three Apple Charts views for HR, cadence, and power actual-vs-target
 - CSV, JSON, and TCX export of recorded workout samples
 - Strava OAuth connection and indoor ride upload from the finished workout samples

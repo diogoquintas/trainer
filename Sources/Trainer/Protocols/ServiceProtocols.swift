@@ -19,6 +19,8 @@ protocol TrainerServicing: AnyObject {
     func start() async
     func stop() async
     func setERGTarget(watts: Int) async throws
+    func setResistanceLevel(_ level: Double) async throws
+    func releaseControl() async throws
 }
 
 protocol HeartRateServicing: AnyObject {

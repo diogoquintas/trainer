@@ -143,3 +143,22 @@ enum WorkoutState: String, Codable {
     case paused
     case finished
 }
+
+enum TrainerControlMode: String, CaseIterable, Codable, Equatable, Identifiable {
+    case erg
+    case resistance
+    case off
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .erg:
+            "ERG"
+        case .resistance:
+            "Resistance"
+        case .off:
+            "Off"
+        }
+    }
+}
