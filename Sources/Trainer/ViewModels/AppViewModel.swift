@@ -300,6 +300,21 @@ final class AppViewModel: ObservableObject {
         }
     }
 
+    func exportWorkoutProgressImage() {
+        do {
+            let panel = NSSavePanel()
+            panel.allowedContentTypes = [.png]
+            panel.nameFieldStringValue = "\(workout.name.safeFilename)-progress.png"
+            panel.canCreateDirectories = true
+
+            guard panel.runModal() == .OK, let url = panel.url else { return }
+            try renderWorkoutProgressImageData().write(to: url, options: .atomic)
+            statusMessage = "Exported progress image to \(url.lastPathComponent)"
+        } catch {
+            statusMessage = "Image export failed: \(error.localizedDescription)"
+        }
+    }
+
     func connectStrava() async {
         guard !isConnectingStrava else { return }
         isConnectingStrava = true
@@ -397,13 +412,17 @@ final class AppViewModel: ObservableObject {
     }
 
     private func renderStravaSummaryImage() throws -> URL {
-        let imageData = try WorkoutSummaryImageRenderer.renderPNG(workout: workout, samples: engine.samples)
+        let imageData = try renderWorkoutProgressImageData()
         let directoryURL = try stravaSummaryImageDirectory()
         let imageURL = directoryURL
             .appendingPathComponent("\(workout.name.safeFilename)-strava-summary-\(Self.exportDateFormatter.string(from: Date())).png")
         try imageData.write(to: imageURL, options: .atomic)
 
         return imageURL
+    }
+
+    private func renderWorkoutProgressImageData() throws -> Data {
+        try WorkoutSummaryImageRenderer.renderPNG(workout: workout, samples: engine.samples)
     }
 
     private func stravaSummaryImageDirectory() throws -> URL {

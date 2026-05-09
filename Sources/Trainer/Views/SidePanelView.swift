@@ -133,6 +133,13 @@ private struct ExportMenu: View {
             }
             .disabled(engine.samples.isEmpty)
 
+            Button {
+                viewModel.exportWorkoutProgressImage()
+            } label: {
+                Label("Export Progress Image", systemImage: "photo")
+            }
+            .disabled(engine.samples.isEmpty)
+
             Divider()
 
             Button {

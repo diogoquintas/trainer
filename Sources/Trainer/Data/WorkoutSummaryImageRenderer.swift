@@ -233,14 +233,14 @@ private struct AverageBlock: View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title.uppercased())
                 .font(.system(size: 15, weight: .black, design: .rounded))
-                .foregroundStyle(color)
+                .foregroundStyle(.white.opacity(0.54))
             HStack(alignment: .lastTextBaseline, spacing: 7) {
                 Text(value)
                     .font(.system(size: 42, weight: .black, design: .rounded))
                     .monospacedDigit()
                     .lineLimit(1)
                     .minimumScaleFactor(0.55)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(color)
                 Text(unit)
                     .font(.system(size: 17, weight: .heavy, design: .rounded))
                     .foregroundStyle(.white.opacity(0.54))
@@ -293,8 +293,8 @@ private struct SummaryChart: View {
                 Spacer()
 
                 VStack(alignment: .trailing, spacing: 34) {
-                    RangeValue(label: "MAX", value: formatted(summary.maximum))
-                    RangeValue(label: "MIN", value: formatted(summary.minimum))
+                    RangeValue(label: "MAX", value: formatted(summary.maximum), color: color)
+                    RangeValue(label: "MIN", value: formatted(summary.minimum), color: color)
                 }
                 .frame(width: 96, alignment: .trailing)
             }
@@ -390,6 +390,7 @@ private struct SummaryChart: View {
 private struct RangeValue: View {
     let label: String
     let value: String
+    let color: Color
 
     var body: some View {
         VStack(alignment: .trailing, spacing: 3) {
@@ -399,7 +400,7 @@ private struct RangeValue: View {
             Text(value)
                 .font(.system(size: 20, weight: .black, design: .rounded))
                 .monospacedDigit()
-                .foregroundStyle(.white.opacity(0.76))
+                .foregroundStyle(color)
         }
     }
 }
