@@ -4,8 +4,7 @@ struct MetricChartView: View {
     let title: String
     let unit: String
     let symbolName: String
-    let actualColor: Color
-    let targetColor: Color
+    let metricColor: Color
     let workout: Workout
     let workoutState: WorkoutState
     let elapsed: TimeInterval
@@ -30,13 +29,13 @@ struct MetricChartView: View {
                 HStack(spacing: 10) {
                     Image(systemName: symbolName)
                         .font(.title3.weight(.bold))
-                        .foregroundStyle(actualColor)
+                        .foregroundStyle(metricColor)
                     Text(title.uppercased())
                         .font(.system(size: 18, weight: .heavy, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.92))
+                        .foregroundStyle(TrainerTheme.Surface.textPrimary)
                     Spacer()
-                    LegendDot(color: actualColor, label: "LIVE")
-                    LegendDot(color: targetColor, label: "TARGET")
+                    LegendDot(color: metricColor, label: "LIVE")
+                    LegendDot(color: metricColor.opacity(0.46), label: "TARGET")
                 }
 
                 CockpitLinePlot(
@@ -44,16 +43,14 @@ struct MetricChartView: View {
                     targetPoints: visibleTargetPoints,
                     xDomain: xDomain,
                     yDomain: yDomain,
-                    actualColor: actualColor,
-                    targetColor: targetColor
+                    metricColor: metricColor
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
             MetricReadout(
                 unit: unit,
-                actualColor: actualColor,
-                targetColor: targetColor,
+                metricColor: metricColor,
                 currentValue: currentValue,
                 targetValue: targetValue
             )
@@ -64,22 +61,16 @@ struct MetricChartView: View {
         .background(panelBackground, in: RoundedRectangle(cornerRadius: 8))
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .stroke(actualColor.opacity(0.34), lineWidth: 1)
+                .stroke(metricColor.opacity(0.50), lineWidth: 1)
         )
+        .shadow(color: metricColor.opacity(0.16), radius: 18, x: 0, y: 8)
         .transaction { transaction in
             transaction.animation = nil
         }
     }
 
-    private var panelBackground: some ShapeStyle {
-        LinearGradient(
-            colors: [
-                Color(red: 0.015, green: 0.018, blue: 0.025),
-                Color(red: 0.025, green: 0.035, blue: 0.045)
-            ],
-            startPoint: .top,
-            endPoint: .bottom
-        )
+    private var panelBackground: LinearGradient {
+        TrainerTheme.Surface.panel
     }
 
     private var xDomain: ClosedRange<Double> {
@@ -154,8 +145,7 @@ private struct CockpitLinePlot: View {
     let targetPoints: [PlotPoint]
     let xDomain: ClosedRange<Double>
     let yDomain: ClosedRange<Double>
-    let actualColor: Color
-    let targetColor: Color
+    let metricColor: Color
 
     var body: some View {
         Canvas { context, size in
@@ -170,14 +160,19 @@ private struct CockpitLinePlot: View {
             let targetPath = path(for: targetPoints, in: plotRect)
             clippedContext.stroke(
                 targetPath,
-                with: .color(targetColor.opacity(0.82)),
+                with: .color(metricColor.opacity(0.46)),
                 style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round, dash: [7, 5])
             )
 
             let actualPath = path(for: actualPoints, in: plotRect)
             clippedContext.stroke(
                 actualPath,
-                with: .color(actualColor),
+                with: .color(metricColor.opacity(0.24)),
+                style: StrokeStyle(lineWidth: 10, lineCap: .round, lineJoin: .round)
+            )
+            clippedContext.stroke(
+                actualPath,
+                with: .color(metricColor),
                 style: StrokeStyle(lineWidth: 4, lineCap: .round, lineJoin: .round)
             )
         }
@@ -196,7 +191,7 @@ private struct CockpitLinePlot: View {
             path.addLine(to: CGPoint(x: rect.maxX, y: y))
             context.stroke(
                 path,
-                with: .color(.white.opacity(index == horizontalLines ? 0.18 : 0.10)),
+                with: .color(Color.white.opacity(index == horizontalLines ? 0.18 : 0.10)),
                 style: StrokeStyle(lineWidth: 1, dash: [4, 7])
             )
         }
@@ -207,7 +202,7 @@ private struct CockpitLinePlot: View {
             var path = Path()
             path.move(to: CGPoint(x: x, y: rect.minY))
             path.addLine(to: CGPoint(x: x, y: rect.maxY))
-            context.stroke(path, with: .color(.white.opacity(0.06)), lineWidth: 1)
+            context.stroke(path, with: .color(Color.white.opacity(0.06)), lineWidth: 1)
         }
     }
 
@@ -253,8 +248,7 @@ private struct PlannedTargetPoint: Identifiable {
 
 private struct MetricReadout: View {
     let unit: String
-    let actualColor: Color
-    let targetColor: Color
+    let metricColor: Color
     let currentValue: Int?
     let targetValue: Int?
 
@@ -263,33 +257,39 @@ private struct MetricReadout: View {
             VStack(alignment: .trailing, spacing: 0) {
                 Text("LIVE")
                     .font(.system(size: 13, weight: .black, design: .rounded))
-                    .foregroundStyle(actualColor)
+                    .foregroundStyle(metricColor)
                 HStack(alignment: .lastTextBaseline, spacing: 8) {
                     Text(WorkoutFormatters.number(currentValue))
                         .font(.system(size: 64, weight: .black, design: .rounded))
                         .monospacedDigit()
                         .minimumScaleFactor(0.55)
-                        .foregroundStyle(.white)
+                        .foregroundStyle(metricColor)
+                        .frame(width: 130, alignment: .trailing)
                     Text(unit)
                         .font(.system(size: 18, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.62))
+                        .foregroundStyle(TrainerTheme.Surface.textSecondary)
+                        .frame(width: 36, alignment: .leading)
                 }
+                .frame(maxWidth: .infinity, alignment: .trailing)
             }
 
             VStack(alignment: .trailing, spacing: 0) {
                 Text("TARGET")
                     .font(.system(size: 13, weight: .black, design: .rounded))
-                    .foregroundStyle(targetColor)
+                    .foregroundStyle(metricColor.opacity(0.72))
                 HStack(alignment: .lastTextBaseline, spacing: 8) {
                     Text(WorkoutFormatters.number(targetValue))
                         .font(.system(size: 38, weight: .black, design: .rounded))
                         .monospacedDigit()
                         .minimumScaleFactor(0.6)
-                        .foregroundStyle(targetColor)
+                        .foregroundStyle(metricColor.opacity(0.72))
+                        .frame(width: 130, alignment: .trailing)
                     Text(unit)
                         .font(.system(size: 15, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.52))
+                        .foregroundStyle(TrainerTheme.Surface.textSecondary)
+                        .frame(width: 36, alignment: .leading)
                 }
+                .frame(maxWidth: .infinity, alignment: .trailing)
             }
         }
         .frame(maxHeight: .infinity)
@@ -308,7 +308,7 @@ private struct LegendDot: View {
                 .shadow(color: color.opacity(0.55), radius: 6)
             Text(label)
                 .font(.system(size: 11, weight: .bold, design: .rounded))
-                .foregroundStyle(.white.opacity(0.62))
+                .foregroundStyle(TrainerTheme.Surface.textSecondary)
         }
     }
 }

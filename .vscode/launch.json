@@ -1,0 +1,24 @@
+{
+    "configurations": [
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:trainer}",
+            "name": "Debug Trainer",
+            "target": "Trainer",
+            "configuration": "debug",
+            "preLaunchTask": "swift: Build Debug Trainer"
+        },
+        {
+            "type": "swift",
+            "request": "launch",
+            "args": [],
+            "cwd": "${workspaceFolder:trainer}",
+            "name": "Release Trainer",
+            "target": "Trainer",
+            "configuration": "release",
+            "preLaunchTask": "swift: Build Release Trainer"
+        }
+    ]
+}

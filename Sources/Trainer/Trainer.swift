@@ -10,6 +10,6 @@ struct Trainer: App {
                 .environmentObject(viewModel)
                 .frame(minWidth: 1180, minHeight: 780)
         }
-        .windowStyle(.titleBar)
+        .windowStyle(.hiddenTitleBar)
     }
 }

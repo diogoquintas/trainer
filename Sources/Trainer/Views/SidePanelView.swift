@@ -6,66 +6,67 @@ struct SidePanelView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            CockpitStatusBlock(engine: engine, profile: viewModel.athleteProfile)
-
-            HStack(spacing: 10) {
-                WorkoutOptionsMenu(engine: engine)
-                    .environmentObject(viewModel)
-
-                ExportMenu(engine: engine)
-                    .environmentObject(viewModel)
-            }
+            CockpitStatusBlock(engine: engine)
 
             Divider()
-                .overlay(.white.opacity(0.14))
+                .overlay(TrainerTheme.Surface.separator)
 
             VStack(alignment: .leading, spacing: 12) {
-                Text("STEP")
-                    .font(.system(size: 13, weight: .black, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.48))
+                HStack(alignment: .firstTextBaseline) {
+                    Text("STEP")
+                        .font(.system(size: 13, weight: .black, design: .rounded))
+                        .foregroundStyle(TrainerTheme.Surface.textTertiary)
+                    Spacer()
+                    Text(stepCounter)
+                        .font(.system(size: 13, weight: .black, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(TrainerTheme.Surface.textSecondary)
+                }
                 Text(engine.currentStep?.name ?? "Ready")
                     .font(.system(size: 26, weight: .black, design: .rounded))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(TrainerTheme.Surface.textPrimary)
                     .lineLimit(2)
                     .minimumScaleFactor(0.65)
                 ProgressView(value: progress)
-                    .tint(.cyan)
+                    .tint(TrainerTheme.Status.time)
                     .scaleEffect(y: 1.8)
                 HStack {
-                    TimeBadge(title: "Elapsed", value: WorkoutFormatters.duration(engine.elapsed), color: .white)
-                    TimeBadge(title: "Left", value: WorkoutFormatters.duration(engine.timeRemainingInStep), color: .cyan)
+                    TimeBadge(title: "Elapsed", value: WorkoutFormatters.duration(stepElapsed), color: TrainerTheme.Surface.textPrimary)
+                    TimeBadge(title: "Left", value: WorkoutFormatters.duration(engine.timeRemainingInStep), color: TrainerTheme.Status.time)
                 }
             }
 
             Divider()
-                .overlay(.white.opacity(0.14))
+                .overlay(TrainerTheme.Surface.separator)
 
             ControlButtons(engine: engine)
 
             Spacer()
         }
         .padding(18)
-        .background(
-            LinearGradient(
-                colors: [
-                    Color(red: 0.065, green: 0.075, blue: 0.085),
-                    Color(red: 0.025, green: 0.028, blue: 0.034)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            ),
-            in: RoundedRectangle(cornerRadius: 8)
-        )
+        .background(TrainerTheme.Surface.panelElevated, in: RoundedRectangle(cornerRadius: 8))
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .stroke(.white.opacity(0.12), lineWidth: 1)
+                .stroke(TrainerTheme.Surface.separator, lineWidth: 1)
         )
+        .shadow(color: .black.opacity(0.34), radius: 18, x: 0, y: 8)
     }
 
     private var progress: Double {
         guard let index = engine.currentStepIndex, let step = engine.currentStep else { return 0 }
         let start = engine.workout.steps.prefix(index).reduce(0) { $0 + $1.duration }
         return min(1, max(0, (engine.elapsed - start) / step.duration))
+    }
+
+    private var stepElapsed: TimeInterval {
+        guard let index = engine.currentStepIndex else { return 0 }
+        let start = engine.workout.steps.prefix(index).reduce(0) { $0 + $1.duration }
+        return max(0, engine.elapsed - start)
+    }
+
+    private var stepCounter: String {
+        guard let index = engine.currentStepIndex else { return "0/\(engine.workout.steps.count)" }
+        return "\(index + 1)/\(engine.workout.steps.count)"
     }
 }
 
@@ -183,65 +184,46 @@ private struct ExportMenu: View {
 
 private struct CockpitStatusBlock: View {
     @ObservedObject var engine: WorkoutEngine
-    let profile: AthleteProfile
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 12) {
             Text("WORKOUT")
                 .font(.system(size: 13, weight: .black, design: .rounded))
-                .foregroundStyle(.white.opacity(0.48))
+                .foregroundStyle(TrainerTheme.Surface.textTertiary)
 
-            HStack(alignment: .lastTextBaseline, spacing: 8) {
-                Text("\(engine.workout.steps.count)")
-                    .font(.system(size: 44, weight: .black, design: .rounded))
-                    .foregroundStyle(.white)
-                Text("steps")
-                    .font(.system(size: 16, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.56))
+            VStack(alignment: .leading, spacing: 4) {
+                Text(engine.workout.name)
+                    .font(.system(size: 21, weight: .black, design: .rounded))
+                    .foregroundStyle(TrainerTheme.Surface.textPrimary)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.72)
+                if let description = engine.workout.description, !description.isEmpty {
+                    Text(description)
+                        .font(.system(size: 13, weight: .semibold, design: .rounded))
+                        .foregroundStyle(TrainerTheme.Surface.textSecondary)
+                        .lineLimit(nil)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
 
-            HStack(alignment: .lastTextBaseline, spacing: 8) {
-                Text(WorkoutFormatters.duration(engine.workout.totalDuration))
-                    .font(.system(size: 32, weight: .black, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(.orange)
-                Text("total")
-                    .font(.system(size: 15, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.56))
-            }
+            ProgressView(value: workoutProgress)
+                .tint(TrainerTheme.Status.time)
+                .scaleEffect(y: 1.8)
 
-            HStack(spacing: 8) {
-                ProfileBadge(title: "FTP", value: "\(profile.ftp)", unit: "W", color: .orange)
-                ProfileBadge(title: "HRT", value: "\(profile.thresholdHeartRateBPM)", unit: "bpm", color: .red)
+            HStack {
+                TimeBadge(title: "Elapsed", value: WorkoutFormatters.duration(engine.elapsed), color: TrainerTheme.Surface.textPrimary)
+                TimeBadge(title: "Left", value: WorkoutFormatters.duration(totalRemaining), color: TrainerTheme.Status.time)
             }
         }
     }
-}
 
-private struct ProfileBadge: View {
-    let title: String
-    let value: String
-    let unit: String
-    let color: Color
+    private var totalRemaining: TimeInterval {
+        max(0, engine.workout.totalDuration - engine.elapsed)
+    }
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(title)
-                .font(.system(size: 10, weight: .black, design: .rounded))
-                .foregroundStyle(.white.opacity(0.46))
-            HStack(alignment: .lastTextBaseline, spacing: 3) {
-                Text(value)
-                    .font(.system(size: 20, weight: .black, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(color)
-                Text(unit)
-                    .font(.system(size: 10, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.48))
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(9)
-        .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 8))
+    private var workoutProgress: Double {
+        guard engine.workout.totalDuration > 0 else { return 0 }
+        return min(1, max(0, engine.elapsed / engine.workout.totalDuration))
     }
 }
 
@@ -254,7 +236,7 @@ private struct TimeBadge: View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title.uppercased())
                 .font(.system(size: 10, weight: .black, design: .rounded))
-                .foregroundStyle(.white.opacity(0.46))
+                .foregroundStyle(TrainerTheme.Surface.textTertiary)
             Text(value)
                 .font(.system(size: 21, weight: .black, design: .rounded))
                 .monospacedDigit()
@@ -262,7 +244,7 @@ private struct TimeBadge: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)
-        .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 8))
+        .background(TrainerTheme.Surface.subtleFill, in: RoundedRectangle(cornerRadius: 8))
     }
 }
 
@@ -274,39 +256,59 @@ private struct ControlButtons: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("CONTROL")
                 .font(.system(size: 13, weight: .black, design: .rounded))
-                .foregroundStyle(.white.opacity(0.48))
+                .foregroundStyle(TrainerTheme.Surface.textTertiary)
 
             VirtualGearControl(engine: engine)
 
-            Button {
-                engine.start()
-            } label: {
-                Label("START", systemImage: "play.fill")
-                    .frame(maxWidth: .infinity)
-                    .font(.system(size: 18, weight: .black, design: .rounded))
-            }
-            .buttonStyle(CockpitButtonStyle(color: .green))
-            .disabled(engine.state == .running || engine.state == .paused)
+            HStack(spacing: 8) {
+                Button {
+                    if engine.state == .paused {
+                        engine.resume()
+                    } else {
+                        engine.start()
+                    }
+                } label: {
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 16, weight: .black, design: .rounded))
+                        .frame(maxWidth: .infinity, minHeight: 42)
+                }
+                .buttonStyle(CockpitButtonStyle(color: TrainerTheme.Control.start))
+                .disabled(engine.state == .running)
+                .help("Start")
+                .accessibilityLabel("Start")
 
-            Button {
-                engine.state == .paused ? engine.resume() : engine.pause()
-            } label: {
-                Label(engine.state == .paused ? "RESUME" : "PAUSE", systemImage: engine.state == .paused ? "playpause.fill" : "pause.fill")
-                    .frame(maxWidth: .infinity)
-                    .font(.system(size: 16, weight: .black, design: .rounded))
-            }
-            .buttonStyle(CockpitButtonStyle(color: .cyan))
-            .disabled(engine.state != .running && engine.state != .paused)
+                Button {
+                    engine.pause()
+                } label: {
+                    Image(systemName: "pause.fill")
+                        .font(.system(size: 16, weight: .black, design: .rounded))
+                        .frame(maxWidth: .infinity, minHeight: 42)
+                }
+                .buttonStyle(CockpitButtonStyle(color: TrainerTheme.Surface.neutralControl))
+                .disabled(engine.state != .running)
+                .help("Pause")
+                .accessibilityLabel("Pause")
 
-            Button(role: .destructive) {
-                engine.stop()
-            } label: {
-                Label("STOP", systemImage: "stop.fill")
-                    .frame(maxWidth: .infinity)
-                    .font(.system(size: 16, weight: .black, design: .rounded))
+                Button(role: .destructive) {
+                    engine.stop()
+                } label: {
+                    Image(systemName: "stop.fill")
+                        .font(.system(size: 16, weight: .black, design: .rounded))
+                        .frame(maxWidth: .infinity, minHeight: 42)
+                }
+                .buttonStyle(CockpitButtonStyle(color: TrainerTheme.Control.stop))
+                .disabled(engine.state == .stopped)
+                .help("Stop")
+                .accessibilityLabel("Stop")
             }
-            .buttonStyle(CockpitButtonStyle(color: .red))
-            .disabled(engine.state == .stopped)
+
+            HStack(spacing: 10) {
+                WorkoutOptionsMenu(engine: engine)
+                    .environmentObject(viewModel)
+
+                ExportMenu(engine: engine)
+                    .environmentObject(viewModel)
+            }
         }
     }
 }
@@ -330,12 +332,12 @@ private struct VirtualGearControl: View {
             Text("\(engine.currentVirtualGear)")
                 .font(.system(size: 18, weight: .black, design: .rounded))
                 .monospacedDigit()
-                .foregroundStyle(.white)
+                .foregroundStyle(TrainerTheme.Surface.textPrimary)
                 .frame(maxWidth: .infinity, minHeight: 30)
-                .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 8))
+                .background(TrainerTheme.Surface.subtleFill, in: RoundedRectangle(cornerRadius: 8))
                 .overlay(
                     RoundedRectangle(cornerRadius: 8)
-                        .stroke(.white.opacity(0.12), lineWidth: 1)
+                        .stroke(TrainerTheme.Surface.separator, lineWidth: 1)
                 )
 
             Button {
@@ -366,17 +368,17 @@ private struct GearButtonStyle: ButtonStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .foregroundStyle(isEnabled ? .white : .white.opacity(0.28))
-            .background(.white.opacity(backgroundOpacity(isPressed: configuration.isPressed)), in: RoundedRectangle(cornerRadius: 8))
+            .foregroundStyle(isEnabled ? TrainerTheme.Surface.textPrimary : TrainerTheme.Surface.textTertiary)
+            .background(fill(isPressed: configuration.isPressed), in: RoundedRectangle(cornerRadius: 8))
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .stroke(.white.opacity(isEnabled ? 0.12 : 0.06), lineWidth: 1)
+                    .stroke(TrainerTheme.Surface.separator.opacity(isEnabled ? 1 : 0.55), lineWidth: 1)
             )
     }
 
-    private func backgroundOpacity(isPressed: Bool) -> Double {
-        guard isEnabled else { return 0.035 }
-        return isPressed ? 0.18 : 0.09
+    private func fill(isPressed: Bool) -> Color {
+        guard isEnabled else { return TrainerTheme.Surface.subtleFill.opacity(0.6) }
+        return isPressed ? TrainerTheme.Surface.strongerFill : TrainerTheme.Surface.subtleFill
     }
 }
 
@@ -385,23 +387,38 @@ private struct CockpitMenuButtonStyle: ButtonStyle {
         configuration.label
             .padding(.horizontal, 10)
             .padding(.vertical, 9)
-            .foregroundStyle(.white)
-            .background(.white.opacity(configuration.isPressed ? 0.16 : 0.09), in: RoundedRectangle(cornerRadius: 8))
+            .foregroundStyle(TrainerTheme.Surface.textPrimary)
+            .background(configuration.isPressed ? TrainerTheme.Surface.strongerFill : TrainerTheme.Surface.subtleFill, in: RoundedRectangle(cornerRadius: 8))
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .stroke(.white.opacity(0.12), lineWidth: 1)
+                    .stroke(TrainerTheme.Surface.separator, lineWidth: 1)
             )
     }
 }
 
 private struct CockpitButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
     let color: Color
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .padding(.vertical, 13)
-            .foregroundStyle(.black)
-            .background(color.opacity(configuration.isPressed ? 0.72 : 1), in: RoundedRectangle(cornerRadius: 8))
-            .opacity(configuration.isPressed ? 0.85 : 1)
+            .foregroundStyle(isEnabled ? TrainerTheme.Surface.textPrimary : TrainerTheme.Surface.textTertiary)
+            .background(fill(isPressed: configuration.isPressed), in: RoundedRectangle(cornerRadius: 8))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(strokeColor, lineWidth: 1)
+            )
+            .shadow(color: isEnabled ? color.opacity(0.24) : .clear, radius: 12, x: 0, y: 5)
+            .opacity(configuration.isPressed && isEnabled ? 0.85 : 1)
+    }
+
+    private func fill(isPressed: Bool) -> Color {
+        guard isEnabled else { return TrainerTheme.Surface.subtleFill.opacity(0.48) }
+        return color.opacity(isPressed ? 0.58 : 0.78)
+    }
+
+    private var strokeColor: Color {
+        isEnabled ? color.opacity(0.90) : TrainerTheme.Surface.separator.opacity(0.55)
     }
 }

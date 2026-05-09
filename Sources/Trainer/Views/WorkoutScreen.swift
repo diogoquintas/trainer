@@ -7,14 +7,11 @@ struct WorkoutScreen: View {
     var body: some View {
         HStack(spacing: 18) {
             VStack(spacing: 18) {
-                WorkoutHeaderView(engine: engine)
-
                 MetricChartView(
                     title: "Heart Rate",
                     unit: "bpm",
                     symbolName: "heart.fill",
-                    actualColor: .red,
-                    targetColor: .mint,
+                    metricColor: TrainerTheme.Metric.heartRate,
                     workout: engine.workout,
                     workoutState: engine.state,
                     elapsed: engine.elapsed,
@@ -29,8 +26,7 @@ struct WorkoutScreen: View {
                     title: "Cadence",
                     unit: "rpm",
                     symbolName: "metronome.fill",
-                    actualColor: .cyan,
-                    targetColor: .green,
+                    metricColor: TrainerTheme.Metric.cadence,
                     workout: engine.workout,
                     workoutState: engine.state,
                     elapsed: engine.elapsed,
@@ -45,8 +41,7 @@ struct WorkoutScreen: View {
                     title: "Power",
                     unit: "W",
                     symbolName: "bolt.fill",
-                    actualColor: .orange,
-                    targetColor: .purple,
+                    metricColor: TrainerTheme.Metric.power,
                     workout: engine.workout,
                     workoutState: engine.state,
                     elapsed: engine.elapsed,
@@ -66,48 +61,6 @@ struct WorkoutScreen: View {
                 .padding(.vertical, 22)
                 .padding(.trailing, 22)
         }
-        .background(
-            LinearGradient(
-                colors: [
-                    Color(red: 0.015, green: 0.018, blue: 0.025),
-                    Color(red: 0.025, green: 0.035, blue: 0.045)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        )
-    }
-}
-
-private struct WorkoutHeaderView: View {
-    @ObservedObject var engine: WorkoutEngine
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(engine.workout.name)
-                    .font(.system(size: 32, weight: .black, design: .rounded))
-                    .foregroundStyle(.white)
-                Text(engine.currentStep?.name ?? "Ready")
-                    .font(.system(size: 18, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.62))
-            }
-            Spacer()
-            VStack(alignment: .trailing, spacing: 3) {
-                Text(WorkoutFormatters.duration(engine.elapsed))
-                    .font(.system(size: 30, weight: .black, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(.white)
-                Text("\(WorkoutFormatters.duration(engine.timeRemainingInStep)) LEFT")
-                    .font(.system(size: 12, weight: .black, design: .rounded))
-                    .foregroundStyle(.cyan)
-            }
-            Text(engine.state.rawValue.capitalized)
-                .font(.system(size: 15, weight: .black, design: .rounded))
-                .foregroundStyle(engine.state == .running ? .black : .white)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
-                .background(engine.state == .running ? Color.green : Color.white.opacity(0.12), in: Capsule())
-        }
+        .background(TrainerTheme.Surface.appBackground)
     }
 }

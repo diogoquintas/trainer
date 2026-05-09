@@ -6,17 +6,6 @@ struct SidebarView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            HStack(spacing: 10) {
-                Image(systemName: "figure.indoor.cycle")
-                    .font(.title3)
-                    .foregroundStyle(.orange)
-                Text("Trainer")
-                    .font(.title2.bold())
-                Spacer()
-            }
-
-            Divider()
-
             DeviceConnectionView(
                 title: "Trainer",
                 state: viewModel.trainerConnectionText,
@@ -101,7 +90,7 @@ struct SidebarView: View {
             Spacer()
         }
         .padding(20)
-        .background(Color(nsColor: .controlBackgroundColor))
+        .background(TrainerTheme.Surface.sidebarBackground)
     }
 }
 

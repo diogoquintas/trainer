@@ -94,7 +94,7 @@ private struct WorkoutSummaryCard: View {
                     MetricSummaryRow(
                         title: "Power",
                         unit: "W",
-                        color: .orange,
+                        color: TrainerTheme.Metric.power,
                         summary: summary.power,
                         samples: summary.samples,
                         actual: { $0.powerWatts },
@@ -103,7 +103,7 @@ private struct WorkoutSummaryCard: View {
                     MetricSummaryRow(
                         title: "Cadence",
                         unit: "rpm",
-                        color: .cyan,
+                        color: TrainerTheme.Metric.cadence,
                         summary: summary.cadence,
                         samples: summary.samples,
                         actual: { $0.cadenceRPM },
@@ -112,7 +112,7 @@ private struct WorkoutSummaryCard: View {
                     MetricSummaryRow(
                         title: "Heart Rate",
                         unit: "bpm",
-                        color: .red,
+                        color: TrainerTheme.Metric.heartRate,
                         summary: summary.heartRate,
                         samples: summary.samples,
                         actual: { $0.heartRateBPM },
