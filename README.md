@@ -11,7 +11,8 @@ The app starts in simulation mode, and can also connect to Bluetooth LE fitness 
 - Live Bluetooth telemetry ingestion for power, cadence, speed, and heart rate where supported
 - Best-effort FTMS ERG target-power and resistance-level writes for compatible smart trainers
 - Basic workout engine with start, pause, resume, stop, and finish states
-- `.zwo` parser for common Zwift workout elements
+- `.zwo` parser for common Zwift workout elements and `textevent` notifications
+- Native workout notifications for ZWO text cues and one-minute step-change warnings
 - ERG, resistance, and off trainer-control modes through a `TrainerServicing` protocol
 - Three Apple Charts views for HR, cadence, and power actual-vs-target
 - CSV, JSON, and TCX export of recorded workout samples
@@ -27,6 +28,12 @@ Scripts/run-app.sh
 This builds the SwiftPM executable, wraps it in a local unsigned `.app` bundle under `Build/`, and opens it with macOS LaunchServices. The app is local-only and does not require the App Store.
 
 On first Bluetooth scan, macOS may ask for Bluetooth permission. The generated local app bundle includes the required usage descriptions.
+
+To show the notification debug panel while troubleshooting local macOS delivery, enable it before launch:
+
+```bash
+defaults write local.personal.Trainer trainer.notificationDebugEnabled -bool true
+```
 
 ## Build
 

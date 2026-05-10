@@ -6,6 +6,7 @@
 <workout>
 <Warmup Duration="60" PowerLow="0.45" PowerHigh="0.65" Cadence="85" />
 <SteadyState Duration="90" Power="0.75" Cadence="90" />
+<textevent timeoffset="120" message="Settle in and keep the cadence smooth." />
 <IntervalsT Repeat="3" OnDuration="45" OffDuration="30" OnPower="0.95" OffPower="0.50" Cadence="95" CadenceRest="82" />
 <Cooldown Duration="60" PowerLow="0.60" PowerHigh="0.40" Cadence="80" />
 </workout>

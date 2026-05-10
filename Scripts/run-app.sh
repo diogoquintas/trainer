@@ -28,6 +28,8 @@ cat > "$CONTENTS_DIR/Info.plist" <<PLIST
     <string>$APP_NAME</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
+    <key>CFBundleDisplayName</key>
+    <string>$APP_NAME</string>
     <key>CFBundleShortVersionString</key>
     <string>0.1</string>
     <key>CFBundleURLTypes</key>
@@ -47,6 +49,8 @@ cat > "$CONTENTS_DIR/Info.plist" <<PLIST
     <string>14.0</string>
     <key>NSHighResolutionCapable</key>
     <true/>
+    <key>NSUserNotificationAlertStyle</key>
+    <string>alert</string>
     <key>NSBluetoothAlwaysUsageDescription</key>
     <string>Trainer uses Bluetooth to discover and connect to smart trainers and heart-rate broadcast devices.</string>
     <key>NSBluetoothPeripheralUsageDescription</key>

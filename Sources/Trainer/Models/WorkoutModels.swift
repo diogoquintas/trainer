@@ -7,6 +7,7 @@ struct Workout: Identifiable, Codable, Equatable {
     var description: String?
     var ftp: Int
     var steps: [WorkoutStep]
+    var textEvents: [WorkoutTextEvent]
 
     init(
         id: UUID = UUID(),
@@ -14,7 +15,8 @@ struct Workout: Identifiable, Codable, Equatable {
         author: String? = nil,
         description: String? = nil,
         ftp: Int = 250,
-        steps: [WorkoutStep]
+        steps: [WorkoutStep],
+        textEvents: [WorkoutTextEvent] = []
     ) {
         self.id = id
         self.name = name
@@ -22,6 +24,29 @@ struct Workout: Identifiable, Codable, Equatable {
         self.description = description
         self.ftp = ftp
         self.steps = steps
+        self.textEvents = textEvents.sorted { $0.offset < $1.offset }
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case author
+        case description
+        case ftp
+        case steps
+        case textEvents
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        author = try container.decodeIfPresent(String.self, forKey: .author)
+        description = try container.decodeIfPresent(String.self, forKey: .description)
+        ftp = try container.decode(Int.self, forKey: .ftp)
+        steps = try container.decode([WorkoutStep].self, forKey: .steps)
+        textEvents = try container.decodeIfPresent([WorkoutTextEvent].self, forKey: .textEvents) ?? []
+        textEvents.sort { $0.offset < $1.offset }
     }
 
     var totalDuration: TimeInterval {
@@ -42,6 +67,18 @@ struct Workout: Identifiable, Codable, Equatable {
                 WorkoutStep(name: "Finish", duration: 90, target: .init(power: .percentFTP(0.85), cadenceRPM: 95, heartRateBPM: 165))
             ]
         )
+    }
+}
+
+struct WorkoutTextEvent: Identifiable, Codable, Equatable {
+    let id: UUID
+    var offset: TimeInterval
+    var message: String
+
+    init(id: UUID = UUID(), offset: TimeInterval, message: String) {
+        self.id = id
+        self.offset = offset
+        self.message = message
     }
 }
 

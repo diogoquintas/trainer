@@ -25,18 +25,22 @@ final class WorkoutEngine: ObservableObject {
     private var trainerService: TrainerServicing
     private var heartRateService: HeartRateServicing
     private let recorder: DataRecording
+    private let notifier: WorkoutNotifying
     private var trainerTask: Task<Void, Never>?
     private var heartRateTask: Task<Void, Never>?
     private var tickTask: Task<Void, Never>?
     private var lastTrainerCommand: TrainerCommand?
     private var manualVirtualGear: Int
     private var nextRecordingElapsed: TimeInterval = 0
+    private var firedTextEventIDs = Set<WorkoutTextEvent.ID>()
+    private var warnedStepIndices = Set<Int>()
 
     init(
         workout: Workout,
         trainerService: TrainerServicing,
         heartRateService: HeartRateServicing,
         recorder: DataRecording,
+        notifier: WorkoutNotifying,
         trainerControlMode: TrainerControlMode = .erg,
         manualVirtualGear: Int = 3
     ) {
@@ -44,6 +48,7 @@ final class WorkoutEngine: ObservableObject {
         self.trainerService = trainerService
         self.heartRateService = heartRateService
         self.recorder = recorder
+        self.notifier = notifier
         self.trainerControlMode = trainerControlMode
         self.manualVirtualGear = manualVirtualGear.clamped(to: Self.virtualGearRange)
         self.currentVirtualGear = manualVirtualGear.clamped(to: Self.virtualGearRange)
@@ -72,7 +77,10 @@ final class WorkoutEngine: ObservableObject {
         lastTrainerCommand = nil
         isERGControlActive = false
         nextRecordingElapsed = 0
+        firedTextEventIDs = []
+        warnedStepIndices = []
         updateStep(for: elapsed, forceERGUpdate: true)
+        sendDueNotifications(previousElapsed: nil)
         recordSample()
         appendChartSample()
         nextRecordingElapsed = recordingInterval
@@ -225,10 +233,12 @@ final class WorkoutEngine: ObservableObject {
 
     private func tick() {
         guard state == .running else { return }
+        let previousElapsed = elapsed
         elapsed += engineInterval
 
         if elapsed >= workout.totalDuration {
             elapsed = workout.totalDuration
+            sendDueNotifications(previousElapsed: previousElapsed)
             appendChartSample()
             recordSampleIfNeeded(force: true)
             finish()
@@ -236,6 +246,7 @@ final class WorkoutEngine: ObservableObject {
         }
 
         updateStep(for: elapsed)
+        sendDueNotifications(previousElapsed: previousElapsed)
         appendChartSample()
         recordSampleIfNeeded()
     }
@@ -354,6 +365,39 @@ final class WorkoutEngine: ObservableObject {
             targetHeartRateBPM: currentTarget.heartRateBPM,
             stepIndex: currentStepIndex
         )
+    }
+
+    private func sendDueNotifications(previousElapsed: TimeInterval?) {
+        let startElapsed = previousElapsed ?? -.ulpOfOne
+        let endElapsed = elapsed
+
+        for textEvent in workout.textEvents where !firedTextEventIDs.contains(textEvent.id) {
+            guard textEvent.offset > startElapsed, textEvent.offset <= endElapsed else { continue }
+            firedTextEventIDs.insert(textEvent.id)
+            sendNotification(title: workout.name, body: textEvent.message)
+        }
+
+        var stepStart: TimeInterval = 0
+        for stepIndex in workout.steps.indices.dropFirst() {
+            stepStart += workout.steps[stepIndex - 1].duration
+            let notificationOffset = stepStart - 60
+            guard notificationOffset >= 0,
+                  !warnedStepIndices.contains(stepIndex),
+                  notificationOffset > startElapsed,
+                  notificationOffset <= endElapsed else {
+                continue
+            }
+
+            warnedStepIndices.insert(stepIndex)
+            let stepName = workout.steps[stepIndex].name ?? "Step \(stepIndex + 1)"
+            sendNotification(title: "Next step in 1 minute", body: stepName)
+        }
+    }
+
+    private func sendNotification(title: String, body: String) {
+        Task {
+            _ = await notifier.sendWorkoutNotification(title: title, body: body)
+        }
     }
 
     private func cancelTasks() {

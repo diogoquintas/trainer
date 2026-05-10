@@ -41,6 +41,14 @@ struct SidePanelView: View {
 
             ControlButtons(engine: engine)
 
+            if viewModel.isNotificationDebugEnabled {
+                Divider()
+                    .overlay(TrainerTheme.Surface.separator)
+
+                NotificationDebugView(engine: engine)
+                    .environmentObject(viewModel)
+            }
+
             Spacer()
         }
         .padding(18)
@@ -67,6 +75,89 @@ struct SidePanelView: View {
     private var stepCounter: String {
         guard let index = engine.currentStepIndex else { return "0/\(engine.workout.steps.count)" }
         return "\(index + 1)/\(engine.workout.steps.count)"
+    }
+}
+
+private struct NotificationDebugView: View {
+    @EnvironmentObject private var viewModel: AppViewModel
+    @ObservedObject var engine: WorkoutEngine
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("NOTIFICATIONS")
+                    .font(.system(size: 13, weight: .black, design: .rounded))
+                    .foregroundStyle(TrainerTheme.Surface.textTertiary)
+                Spacer()
+                Text("\(engine.workout.textEvents.count) cues")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(TrainerTheme.Surface.textSecondary)
+            }
+
+            Text(viewModel.notificationDebugStatus)
+                .font(.caption2.monospaced())
+                .foregroundStyle(TrainerTheme.Surface.textSecondary)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text(viewModel.notificationDebugLog.last ?? viewModel.statusMessage)
+                .font(.caption)
+                .foregroundStyle(TrainerTheme.Surface.textSecondary)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack(spacing: 8) {
+                Button {
+                    Task {
+                        await viewModel.refreshNotificationDebugStatus()
+                    }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .frame(maxWidth: .infinity, minHeight: 30)
+                }
+                .buttonStyle(CockpitButtonStyle(color: TrainerTheme.Surface.neutralControl))
+                .help("Refresh notification status")
+                .accessibilityLabel("Refresh notification status")
+
+                Button {
+                    Task {
+                        await viewModel.sendTestNotification()
+                    }
+                } label: {
+                    Image(systemName: "bell.badge")
+                        .frame(maxWidth: .infinity, minHeight: 30)
+                }
+                .buttonStyle(CockpitButtonStyle(color: TrainerTheme.Status.time))
+                .help("Send test notification")
+                .accessibilityLabel("Send test notification")
+
+                Menu {
+                    Button {
+                        viewModel.copyNotificationDebugLog()
+                    } label: {
+                        Label("Copy Log", systemImage: "doc.on.doc")
+                    }
+                    .disabled(viewModel.notificationDebugLog.isEmpty)
+
+                    Button {
+                        viewModel.clearNotificationDebugLog()
+                    } label: {
+                        Label("Clear Log", systemImage: "trash")
+                    }
+                    .disabled(viewModel.notificationDebugLog.isEmpty)
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .frame(maxWidth: .infinity, minHeight: 30)
+                }
+                .menuStyle(.button)
+                .buttonStyle(CockpitButtonStyle(color: TrainerTheme.Surface.neutralControl))
+                .help("Notification debug log")
+                .accessibilityLabel("Notification debug log")
+            }
+        }
+        .task {
+            await viewModel.refreshNotificationDebugStatus()
+        }
     }
 }
 

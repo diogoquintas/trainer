@@ -50,3 +50,12 @@ protocol StravaServicing {
     func connect() async throws
     func uploadActivity(fileURL: URL, name: String, description: String?) async throws -> StravaUpload
 }
+
+@MainActor
+protocol WorkoutNotifying: AnyObject {
+    var debugHandler: ((String) -> Void)? { get set }
+
+    func requestAuthorizationIfNeeded() async
+    func notificationDebugStatus() async -> String
+    func sendWorkoutNotification(title: String, body: String) async -> String
+}

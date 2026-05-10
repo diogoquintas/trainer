@@ -6,6 +6,7 @@ final class ZWOParser: NSObject, WorkoutParsing {
     private var author: String?
     private var workoutDescription: String?
     private var steps: [WorkoutStep] = []
+    private var textEvents: [WorkoutTextEvent] = []
     private var currentTextElement: String?
     private var currentText = ""
 
@@ -15,6 +16,7 @@ final class ZWOParser: NSObject, WorkoutParsing {
         author = nil
         workoutDescription = nil
         steps = []
+        textEvents = []
         currentTextElement = nil
         currentText = ""
 
@@ -34,7 +36,8 @@ final class ZWOParser: NSObject, WorkoutParsing {
             author: author,
             description: workoutDescription,
             ftp: ftp,
-            steps: steps
+            steps: steps,
+            textEvents: textEvents
         )
     }
 }
@@ -59,6 +62,8 @@ extension ZWOParser: XMLParserDelegate {
             appendIntervals(attributeDict)
         case "FreeRide":
             appendFreeRide(attributeDict)
+        case "textevent", "TextEvent":
+            appendTextEvent(attributeDict)
         default:
             break
         }
@@ -176,6 +181,14 @@ private extension ZWOParser {
             )
         )
     }
+
+    func appendTextEvent(_ attributes: [String: String]) {
+        guard let offset = attributes.double("timeoffset"),
+              let message = attributes.nonEmptyString("message") else {
+            return
+        }
+        textEvents.append(WorkoutTextEvent(offset: max(0, offset), message: message))
+    }
 }
 
 enum WorkoutParserError: LocalizedError {
@@ -198,12 +211,20 @@ private extension Dictionary where Key == String, Value == String {
     }
 
     func int(_ key: String) -> Int? {
-        guard let raw = self[key] else { return nil }
+        guard let raw = stringValue(key) else { return nil }
         return Int(Double(raw) ?? .nan)
     }
 
     func double(_ key: String) -> Double? {
-        guard let raw = self[key], let value = Double(raw) else { return nil }
+        guard let raw = stringValue(key), let value = Double(raw) else { return nil }
+        return value
+    }
+
+    func nonEmptyString(_ key: String) -> String? {
+        guard let value = stringValue(key)?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty else {
+            return nil
+        }
         return value
     }
 
@@ -214,6 +235,10 @@ private extension Dictionary where Key == String, Value == String {
 
         guard let percent = double(defaultKey) else { return nil }
         return .percentFTP(percent)
+    }
+
+    private func stringValue(_ key: String) -> String? {
+        self[key] ?? first { $0.key.caseInsensitiveCompare(key) == .orderedSame }?.value
     }
 }
 

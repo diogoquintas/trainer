@@ -19,16 +19,25 @@ final class AppViewModel: ObservableObject {
     @Published var isConnectingStrava = false
     @Published var isStravaConnected = false
     @Published var trainerCommunicationLog: [TrainerCommunicationLogEntry] = []
+    @Published var notificationDebugLog: [String] = []
+    @Published var notificationDebugStatus = "Notification status unknown"
 
     private static let athleteProfileDefaultsKey = "trainer.athleteProfile"
+    private static let notificationDebugDefaultsKey = "trainer.notificationDebugEnabled"
 
     private let simulationBluetoothManager: MockBluetoothManager
     private let bluetoothManager: CoreBluetoothManager
     private let parser: WorkoutParsing
     private let libraryStore: WorkoutLibraryStore
     private let stravaService: StravaServicing
+    private let notificationService: WorkoutNotifying
     private var trainerService: any TrainerServicing
     private var heartRateService: any HeartRateServicing
+
+    var isNotificationDebugEnabled: Bool {
+        UserDefaults.standard.bool(forKey: Self.notificationDebugDefaultsKey)
+            || ProcessInfo.processInfo.arguments.contains("--notification-debug")
+    }
 
     init() {
         let athleteProfile = Self.loadAthleteProfile()
@@ -44,6 +53,7 @@ final class AppViewModel: ObservableObject {
         let trainer = MockTrainerService()
         let heartRate = MockHeartRateService()
         let recorder = DataRecorder()
+        let notificationService = WorkoutNotificationService()
 
         self.athleteProfile = athleteProfile
         self.workouts = workouts
@@ -54,6 +64,7 @@ final class AppViewModel: ObservableObject {
             trainerService: trainer,
             heartRateService: heartRate,
             recorder: recorder,
+            notifier: notificationService,
             trainerControlMode: .erg,
             manualVirtualGear: 3
         )
@@ -64,10 +75,16 @@ final class AppViewModel: ObservableObject {
         self.parser = ZWOParser()
         self.libraryStore = libraryStore
         self.stravaService = StravaService()
+        self.notificationService = notificationService
         self.isStravaConnected = self.stravaService.isConnected
         self.bluetoothManager.trainerCommunicationHandler = { [weak self] entry in
             Task { @MainActor in
                 self?.appendTrainerCommunicationLog(entry)
+            }
+        }
+        self.notificationService.debugHandler = { [weak self] message in
+            Task { @MainActor in
+                self?.appendNotificationDebugLog(message)
             }
         }
     }
@@ -373,6 +390,32 @@ final class AppViewModel: ObservableObject {
         statusMessage = "Cleared trainer communication log"
     }
 
+    func refreshNotificationDebugStatus() async {
+        let status = await notificationService.notificationDebugStatus()
+        notificationDebugStatus = status
+        appendNotificationDebugLog("Status: \(status)")
+    }
+
+    func sendTestNotification() async {
+        let result = await notificationService.sendWorkoutNotification(
+            title: "Trainer notification test",
+            body: "If you see this, native notifications are working."
+        )
+        notificationDebugStatus = await notificationService.notificationDebugStatus()
+        statusMessage = result
+    }
+
+    func copyNotificationDebugLog() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(formattedNotificationDebugLog, forType: .string)
+        statusMessage = "Copied notification debug log"
+    }
+
+    func clearNotificationDebugLog() {
+        notificationDebugLog = []
+        statusMessage = "Cleared notification debug log"
+    }
+
     private func replaceWorkout(_ newWorkout: Workout) {
         engine.stop()
         workout = newWorkout
@@ -387,6 +430,7 @@ final class AppViewModel: ObservableObject {
             trainerService: trainerService,
             heartRateService: heartRateService,
             recorder: DataRecorder(),
+            notifier: notificationService,
             trainerControlMode: trainerControlMode,
             manualVirtualGear: manualVirtualGear
         )
@@ -449,6 +493,18 @@ final class AppViewModel: ObservableObject {
         trainerCommunicationLog.append(entry)
         if trainerCommunicationLog.count > 500 {
             trainerCommunicationLog.removeFirst(trainerCommunicationLog.count - 500)
+        }
+    }
+
+    private var formattedNotificationDebugLog: String {
+        guard !notificationDebugLog.isEmpty else { return "Notification debug log is empty." }
+        return notificationDebugLog.joined(separator: "\n")
+    }
+
+    private func appendNotificationDebugLog(_ message: String) {
+        notificationDebugLog.append("\(Self.logDateFormatter.string(from: Date())) \(message)")
+        if notificationDebugLog.count > 200 {
+            notificationDebugLog.removeFirst(notificationDebugLog.count - 200)
         }
     }
 
