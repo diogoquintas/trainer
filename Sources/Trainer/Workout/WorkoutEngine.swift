@@ -259,7 +259,7 @@ final class WorkoutEngine: ObservableObject {
             let nextCursor = cursor + step.duration
             if elapsed < nextCursor {
                 resolvedIndex = index
-                currentTarget = step.target
+                currentTarget = step.target(at: elapsed - cursor)
                 break
             }
             cursor = nextCursor
@@ -269,7 +269,8 @@ final class WorkoutEngine: ObservableObject {
         currentVirtualGear = virtualGear()
         guard let command = trainerCommand() else {
             currentResistanceLevel = nil
-            if trainerControlMode == .off {
+            lastTrainerCommand = nil
+            if trainerControlMode == .off || currentStep?.controlMode == .freeRide {
                 Task {
                     try? await trainerService.releaseControl()
                 }
@@ -292,6 +293,10 @@ final class WorkoutEngine: ObservableObject {
     }
 
     private func trainerCommand() -> TrainerCommand? {
+        if currentStep?.controlMode == .freeRide {
+            return nil
+        }
+
         switch trainerControlMode {
         case .erg:
             guard isERGControlActive else { return nil }

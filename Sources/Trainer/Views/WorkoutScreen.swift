@@ -144,7 +144,7 @@ struct WorkoutScreen: View {
             currentValue: engine.latestHeartRateReading?.bpm,
             targetValue: engine.currentTarget.heartRateBPM,
             actual: { $0.heartRateBPM },
-            plannedTarget: { step, _ in step.target.heartRateBPM },
+            plannedTarget: { step, _, elapsed in step.target(at: elapsed).heartRateBPM },
             chartScale: scale
         )
     }
@@ -162,7 +162,7 @@ struct WorkoutScreen: View {
             currentValue: engine.latestTrainerReading.cadenceRPM,
             targetValue: engine.currentTarget.cadenceRPM,
             actual: { $0.cadenceRPM },
-            plannedTarget: { step, _ in step.target.cadenceRPM },
+            plannedTarget: { step, _, elapsed in step.target(at: elapsed).cadenceRPM },
             chartScale: scale
         )
     }
@@ -180,7 +180,7 @@ struct WorkoutScreen: View {
             currentValue: engine.latestTrainerReading.powerWatts,
             targetValue: engine.currentTarget.resolvedPowerWatts(ftp: engine.workout.ftp),
             actual: { $0.powerWatts },
-            plannedTarget: { step, ftp in step.target.resolvedPowerWatts(ftp: ftp) },
+            plannedTarget: { step, ftp, elapsed in step.target(at: elapsed).resolvedPowerWatts(ftp: ftp) },
             chartScale: scale
         )
     }

@@ -12,7 +12,7 @@ struct MetricChartView: View {
     let currentValue: Int?
     let targetValue: Int?
     let actual: (WorkoutSample) -> Int?
-    let plannedTarget: (WorkoutStep, Int) -> Int?
+    let plannedTarget: (WorkoutStep, Int, TimeInterval) -> Int?
     let chartScale: CGFloat
 
     private var scale: CGFloat {
@@ -123,7 +123,7 @@ struct MetricChartView: View {
         var elapsed: TimeInterval = 0
 
         for (index, step) in workout.steps.enumerated() {
-            guard let value = plannedTarget(step, workout.ftp) else {
+            guard plannedTarget(step, workout.ftp, 0) != nil else {
                 elapsed += step.duration
                 continue
             }
@@ -132,13 +132,22 @@ struct MetricChartView: View {
             let visibleStart = max(elapsed, domain.lowerBound)
             let visibleEnd = min(end, domain.upperBound)
 
+            let startStepElapsed = max(0, visibleStart - elapsed)
+            let endStepElapsed = min(step.duration, max(0, visibleEnd - elapsed))
+
             if visibleStart <= visibleEnd, end >= domain.lowerBound, elapsed <= domain.upperBound {
                 points.append(
                     PlannedTargetPoint(
-                        elapsed: visibleStart, value: value, stepIndex: index, edge: .start))
+                        elapsed: visibleStart,
+                        value: plannedTarget(step, workout.ftp, startStepElapsed) ?? 0,
+                        stepIndex: index,
+                        edge: .start))
                 points.append(
                     PlannedTargetPoint(
-                        elapsed: visibleEnd, value: value, stepIndex: index, edge: .end))
+                        elapsed: visibleEnd,
+                        value: plannedTarget(step, workout.ftp, endStepElapsed) ?? 0,
+                        stepIndex: index,
+                        edge: .end))
             }
 
             elapsed = end
