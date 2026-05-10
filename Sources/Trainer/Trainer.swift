@@ -2,6 +2,7 @@ import SwiftUI
 
 @main
 struct Trainer: App {
+    @NSApplicationDelegateAdaptor(ScreenWakeController.self) private var screenWakeController
     @StateObject private var viewModel = AppViewModel()
 
     var body: some Scene {
