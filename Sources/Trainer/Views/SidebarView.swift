@@ -3,6 +3,7 @@ import SwiftUI
 struct SidebarView: View {
     @EnvironmentObject private var viewModel: AppViewModel
     @Binding var isImporting: Bool
+    @Binding var isImportingRoute: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -85,6 +86,55 @@ struct SidebarView: View {
                     viewModel.removeSelectedWorkout()
                 }
 
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Text("Virtual Routes")
+                        .font(.headline)
+                    Spacer()
+                    Button {
+                        viewModel.removeSelectedRoute()
+                    } label: {
+                        Image(systemName: "minus")
+                    }
+                    .disabled(viewModel.selectedRoute == nil)
+                    .help("Remove selected route")
+                    Button {
+                        isImportingRoute = true
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                    .help("Import .gpx")
+                }
+
+                if viewModel.routes.isEmpty {
+                    Text("No routes loaded")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .padding(.vertical, 6)
+                } else {
+                    List(selection: $viewModel.selectedRouteID) {
+                        ForEach(viewModel.routes) { route in
+                            VirtualRouteLibraryRow(route: route)
+                                .tag(route.id)
+                                .contentShape(Rectangle())
+                                .contextMenu {
+                                    Button(role: .destructive) {
+                                        viewModel.removeRoute(id: route.id)
+                                    } label: {
+                                        Label("Remove", systemImage: "trash")
+                                    }
+                                }
+                        }
+                    }
+                    .frame(minHeight: 95, maxHeight: 150)
+                    .onChange(of: viewModel.selectedRouteID) { _, routeID in
+                        viewModel.selectRoute(id: routeID)
+                    }
+                }
             }
 
             Spacer()
@@ -234,6 +284,25 @@ private struct WorkoutLibraryRow: View {
                 .foregroundStyle(.secondary)
         }
         .padding(.vertical, 4)
+    }
+}
+
+private struct VirtualRouteLibraryRow: View {
+    let route: VirtualRoute
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(route.name)
+                .font(.callout.weight(.semibold))
+                .lineLimit(1)
+            Text("\(WorkoutFormatters.distance(route.totalDistanceMeters)) · \(Int(route.elevationGainMeters.rounded())) m gain")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text(route.hasCompleteElevation ? "Elevation: Open-Meteo / Copernicus DEM" : "Elevation: GPX data only")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 6)
     }
 }
 

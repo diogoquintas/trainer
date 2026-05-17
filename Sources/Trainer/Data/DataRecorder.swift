@@ -28,7 +28,7 @@ final class DataRecorder: DataRecording {
 
     func exportCSV() throws -> String {
         var rows = [
-            "timestamp,elapsed,powerWatts,cadenceRPM,heartRateBPM,targetPowerWatts,targetCadenceRPM,targetHeartRateBPM,stepIndex"
+            "timestamp,elapsed,powerWatts,cadenceRPM,heartRateBPM,targetPowerWatts,targetCadenceRPM,targetHeartRateBPM,stepIndex,latitude,longitude,altitudeMeters,distanceMeters,speedMetersPerSecond"
         ]
 
         let formatter = ISO8601DateFormatter()
@@ -42,7 +42,12 @@ final class DataRecorder: DataRecording {
                 sample.targetPowerWatts.csvValue,
                 sample.targetCadenceRPM.csvValue,
                 sample.targetHeartRateBPM.csvValue,
-                sample.stepIndex.csvValue
+                sample.stepIndex.csvValue,
+                sample.latitude.csvValue,
+                sample.longitude.csvValue,
+                sample.altitudeMeters.csvValue,
+                sample.distanceMeters.csvValue,
+                sample.speedMetersPerSecond.csvValue
             ].joined(separator: ",")
         }
 
@@ -56,6 +61,7 @@ final class DataRecorder: DataRecording {
 
         let formatter = ISO8601DateFormatter()
         let totalSeconds = Int(storedSamples.last?.elapsed.rounded() ?? 0)
+        let totalDistanceMeters = storedSamples.last?.distanceMeters ?? 0
         let calories = estimatedCalories(from: storedSamples)
         let trackpoints = storedSamples.map { sample in
             tcxTrackpoint(sample, formatter: formatter)
@@ -69,7 +75,7 @@ final class DataRecorder: DataRecording {
               <Id>\(formatter.string(from: firstSample.timestamp))</Id>
               <Lap StartTime="\(formatter.string(from: firstSample.timestamp))">
                 <TotalTimeSeconds>\(max(1, totalSeconds))</TotalTimeSeconds>
-                <DistanceMeters>0.0</DistanceMeters>
+                <DistanceMeters>\(totalDistanceMeters.tcxDecimal)</DistanceMeters>
                 <Calories>\(calories)</Calories>
                 <Intensity>Active</Intensity>
                 <TriggerMethod>Manual</TriggerMethod>
@@ -106,6 +112,23 @@ final class DataRecorder: DataRecording {
             "                    <Time>\(formatter.string(from: sample.timestamp))</Time>"
         ]
 
+        if let latitude = sample.latitude, let longitude = sample.longitude {
+            lines += [
+                "                    <Position>",
+                "                      <LatitudeDegrees>\(latitude.tcxCoordinate)</LatitudeDegrees>",
+                "                      <LongitudeDegrees>\(longitude.tcxCoordinate)</LongitudeDegrees>",
+                "                    </Position>"
+            ]
+        }
+
+        if let altitudeMeters = sample.altitudeMeters {
+            lines.append("                    <AltitudeMeters>\(altitudeMeters.tcxDecimal)</AltitudeMeters>")
+        }
+
+        if let distanceMeters = sample.distanceMeters {
+            lines.append("                    <DistanceMeters>\(distanceMeters.tcxDecimal)</DistanceMeters>")
+        }
+
         if let heartRateBPM = sample.heartRateBPM {
             lines += [
                 "                    <HeartRateBpm>",
@@ -118,11 +141,21 @@ final class DataRecorder: DataRecording {
             lines.append("                    <Cadence>\(cadenceRPM)</Cadence>")
         }
 
-        if let powerWatts = sample.powerWatts {
+        if sample.powerWatts != nil || sample.speedMetersPerSecond != nil {
             lines += [
                 "                    <Extensions>",
-                "                      <ns3:TPX>",
-                "                        <ns3:Watts>\(powerWatts)</ns3:Watts>",
+                "                      <ns3:TPX>"
+            ]
+
+            if let speedMetersPerSecond = sample.speedMetersPerSecond {
+                lines.append("                        <ns3:Speed>\(speedMetersPerSecond.tcxDecimal)</ns3:Speed>")
+            }
+
+            if let powerWatts = sample.powerWatts {
+                lines.append("                        <ns3:Watts>\(powerWatts)</ns3:Watts>")
+            }
+
+            lines += [
                 "                      </ns3:TPX>",
                 "                    </Extensions>"
             ]
@@ -148,6 +181,22 @@ final class DataRecorder: DataRecording {
 private extension Optional where Wrapped == Int {
     var csvValue: String {
         map(String.init) ?? ""
+    }
+}
+
+private extension Optional where Wrapped == Double {
+    var csvValue: String {
+        map { String(format: "%.6f", $0) } ?? ""
+    }
+}
+
+private extension Double {
+    var tcxDecimal: String {
+        String(format: "%.2f", self)
+    }
+
+    var tcxCoordinate: String {
+        String(format: "%.7f", self)
     }
 }
 

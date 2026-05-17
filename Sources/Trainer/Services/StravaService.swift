@@ -83,12 +83,20 @@ final class StravaService: StravaServicing {
     func uploadActivity(fileURL: URL, name: String, description: String?) async throws -> StravaUpload {
         let accessToken = try await accessToken()
         let externalID = fileURL.lastPathComponent
-        let body = try MultipartFormData()
+        let hasGPSData = try tcxContainsGPSData(fileURL)
+        var formData = MultipartFormData()
             .field(named: "data_type", value: "tcx")
             .field(named: "name", value: name)
             .field(named: "description", value: description ?? "")
-            .field(named: "trainer", value: "1")
             .field(named: "external_id", value: externalID)
+
+        if hasGPSData {
+            formData = formData.field(named: "sport_type", value: "Ride")
+        } else {
+            formData = formData.field(named: "trainer", value: "1")
+        }
+
+        let body = try formData
             .file(named: "file", fileURL: fileURL, mimeType: "application/vnd.garmin.tcx+xml")
             .encode()
 
@@ -101,6 +109,14 @@ final class StravaService: StravaServicing {
         let (data, response) = try await client.data(for: request)
         try validate(response: response, data: data)
         return try decoder.decode(StravaUpload.self, from: data)
+    }
+
+    private func tcxContainsGPSData(_ fileURL: URL) throws -> Bool {
+        let data = try Data(contentsOf: fileURL)
+        guard let xml = String(data: data, encoding: .utf8) else { return false }
+        return xml.contains("<Position>")
+            && xml.contains("<LatitudeDegrees>")
+            && xml.contains("<LongitudeDegrees>")
     }
 
     private func accessToken() async throws -> String {

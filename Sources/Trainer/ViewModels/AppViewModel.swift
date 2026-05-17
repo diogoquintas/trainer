@@ -15,6 +15,9 @@ final class AppViewModel: ObservableObject {
     @Published var athleteProfile: AthleteProfile
     @Published var trainerControlMode: TrainerControlMode = .erg
     @Published var manualVirtualGear: Int = 3
+    @Published var routes: [VirtualRoute]
+    @Published var selectedRouteID: VirtualRoute.ID?
+    @Published var selectedRoute: VirtualRoute?
     @Published var isUploadingToStrava = false
     @Published var isConnectingStrava = false
     @Published var isStravaConnected = false
@@ -24,10 +27,13 @@ final class AppViewModel: ObservableObject {
 
     private static let athleteProfileDefaultsKey = "trainer.athleteProfile"
     private static let notificationDebugDefaultsKey = "trainer.notificationDebugEnabled"
+    private static let selectedRouteDefaultsKey = "trainer.selectedRouteID"
 
     private let simulationBluetoothManager: MockBluetoothManager
     private let bluetoothManager: CoreBluetoothManager
     private let parser: WorkoutParsing
+    private let routeParser: GPXRouteParser
+    private let elevationService: OpenMeteoElevationService
     private let libraryStore: WorkoutLibraryStore
     private let stravaService: StravaServicing
     private let notificationService: WorkoutNotifying
@@ -48,6 +54,10 @@ final class AppViewModel: ObservableObject {
             try? libraryStore.saveWorkouts(workouts)
         }
 
+        let routes = libraryStore.loadRoutes()
+        let savedRouteID = UserDefaults.standard.string(forKey: Self.selectedRouteDefaultsKey).flatMap(UUID.init(uuidString:))
+        let selectedRoute = savedRouteID.flatMap { id in routes.first { $0.id == id } } ?? routes.first
+
         var workout = workouts.first ?? Workout.sample(ftp: athleteProfile.ftp)
         workout.ftp = athleteProfile.ftp
         let trainer = MockTrainerService()
@@ -59,6 +69,9 @@ final class AppViewModel: ObservableObject {
         self.workouts = workouts
         self.selectedWorkoutID = workout.id
         self.workout = workout
+        self.routes = routes
+        self.selectedRouteID = selectedRoute?.id
+        self.selectedRoute = selectedRoute
         self.engine = WorkoutEngine(
             workout: workout,
             trainerService: trainer,
@@ -66,13 +79,17 @@ final class AppViewModel: ObservableObject {
             recorder: recorder,
             notifier: notificationService,
             trainerControlMode: .erg,
-            manualVirtualGear: 3
+            manualVirtualGear: 3,
+            athleteProfile: athleteProfile,
+            virtualRoute: selectedRoute
         )
         self.simulationBluetoothManager = MockBluetoothManager()
         self.bluetoothManager = CoreBluetoothManager()
         self.trainerService = trainer
         self.heartRateService = heartRate
         self.parser = ZWOParser()
+        self.routeParser = GPXRouteParser()
+        self.elevationService = OpenMeteoElevationService()
         self.libraryStore = libraryStore
         self.stravaService = StravaService()
         self.notificationService = notificationService
@@ -206,6 +223,96 @@ final class AppViewModel: ObservableObject {
         }
     }
 
+    func importRoute(from url: URL) async {
+        do {
+            let canAccess = url.startAccessingSecurityScopedResource()
+            defer {
+                if canAccess { url.stopAccessingSecurityScopedResource() }
+            }
+
+            let data = try Data(contentsOf: url)
+            let route = try routeParser.parseRoute(
+                from: data,
+                fallbackName: url.deletingPathExtension().lastPathComponent
+            )
+            statusMessage = "Loading elevation for \(route.name)..."
+            let enrichedRoute: VirtualRoute
+            do {
+                enrichedRoute = try await elevationService.enrichedRoute(route)
+            } catch {
+                enrichedRoute = route
+                statusMessage = "Loaded \(route.name) without public elevation: \(error.localizedDescription)"
+            }
+            try addRoute(enrichedRoute)
+            selectRoute(enrichedRoute)
+            statusMessage = enrichedRoute.hasCompleteElevation
+                ? "Imported and saved \(enrichedRoute.name) with public elevation"
+                : "Imported and saved \(enrichedRoute.name)"
+        } catch {
+            statusMessage = "Route import failed: \(error.localizedDescription)"
+        }
+    }
+
+    func removeSelectedRoute() {
+        guard let selectedRouteID else { return }
+        removeRoute(id: selectedRouteID)
+    }
+
+    func selectRoute(_ route: VirtualRoute?) {
+        selectedRoute = route
+        selectedRouteID = route?.id
+        saveSelectedRouteID(route?.id)
+        engine.replaceVirtualRoute(route)
+        if let route {
+            statusMessage = "Loaded route \(route.name)"
+        } else {
+            statusMessage = "Cleared virtual route"
+        }
+    }
+
+    func selectRoute(id: VirtualRoute.ID?) {
+        guard let id else {
+            selectRoute(nil)
+            return
+        }
+
+        guard let route = routes.first(where: { $0.id == id }) else {
+            selectedRouteID = selectedRoute?.id
+            return
+        }
+
+        selectRoute(route)
+    }
+
+    func removeRoute(id: VirtualRoute.ID) {
+        guard let removedIndex = routes.firstIndex(where: { $0.id == id }) else { return }
+
+        let previousRoutes = routes
+        let removedRoute = routes[removedIndex]
+        routes.remove(at: removedIndex)
+
+        do {
+            try libraryStore.saveRoutes(routes)
+        } catch {
+            statusMessage = "Removing \(removedRoute.name) failed: \(error.localizedDescription)"
+            routes = previousRoutes
+            selectedRouteID = selectedRoute?.id
+            return
+        }
+
+        if selectedRoute?.id == id {
+            let replacement: VirtualRoute?
+            if routes.isEmpty {
+                replacement = nil
+            } else {
+                replacement = routes[min(removedIndex, routes.count - 1)]
+            }
+            selectRoute(replacement)
+        }
+
+        statusMessage = "Removed \(removedRoute.name)"
+    }
+
     func selectWorkout(_ selected: Workout) {
         var selectedWorkout = selected
         selectedWorkout.ftp = athleteProfile.ftp
@@ -266,6 +373,7 @@ final class AppViewModel: ObservableObject {
         let previousFTP = athleteProfile.ftp
         athleteProfile = profile.sanitized
         saveAthleteProfile()
+        engine.updateAthleteProfile(athleteProfile)
         applyAthleteFTPToCurrentWorkout(previousFTP: previousFTP)
     }
 
@@ -432,7 +540,9 @@ final class AppViewModel: ObservableObject {
             recorder: DataRecorder(),
             notifier: notificationService,
             trainerControlMode: trainerControlMode,
-            manualVirtualGear: manualVirtualGear
+            manualVirtualGear: manualVirtualGear,
+            athleteProfile: athleteProfile,
+            virtualRoute: selectedRoute
         )
     }
 
@@ -443,6 +553,26 @@ final class AppViewModel: ObservableObject {
             try libraryStore.saveWorkouts(workouts)
         } catch {
             statusMessage = "Workout imported but saving failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func addRoute(_ newRoute: VirtualRoute) throws {
+        let previousRoutes = routes
+        routes.removeAll { $0.id == newRoute.id }
+        routes.append(newRoute)
+        do {
+            try libraryStore.saveRoutes(routes)
+        } catch {
+            routes = previousRoutes
+            throw error
+        }
+    }
+
+    private func saveSelectedRouteID(_ routeID: VirtualRoute.ID?) {
+        if let routeID {
+            UserDefaults.standard.set(routeID.uuidString, forKey: Self.selectedRouteDefaultsKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: Self.selectedRouteDefaultsKey)
         }
     }
 

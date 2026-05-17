@@ -28,11 +28,19 @@ struct WorkoutScreen: View {
 
     private var resizableChartStack: some View {
         GeometryReader { geometry in
-            let chartTotalHeight = max(0, geometry.size.height - resizeHandleHeight * 2)
+            let mapHeight = engine.virtualRoute == nil ? 0 : min(260, max(190, geometry.size.height * 0.30))
+            let mapSpacing: CGFloat = engine.virtualRoute == nil ? 0 : 16
+            let chartTotalHeight = max(0, geometry.size.height - resizeHandleHeight * 2 - mapHeight - mapSpacing)
             let fractions = normalizedChartFractions
             let heights = fractions.map { $0 * chartTotalHeight }
 
             VStack(spacing: 0) {
+                if engine.virtualRoute != nil {
+                    VirtualRouteMapView(engine: engine)
+                        .frame(height: mapHeight)
+                        .padding(.bottom, mapSpacing)
+                }
+
                 heartRateChart(scale: chartScale(for: heights[0]))
                     .frame(height: heights[0])
 

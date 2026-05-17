@@ -226,6 +226,11 @@ struct WorkoutSample: Identifiable, Codable, Equatable {
     let targetCadenceRPM: Int?
     let targetHeartRateBPM: Int?
     let stepIndex: Int?
+    let latitude: Double?
+    let longitude: Double?
+    let altitudeMeters: Double?
+    let distanceMeters: Double?
+    let speedMetersPerSecond: Double?
 
     init(
         id: UUID = UUID(),
@@ -237,7 +242,12 @@ struct WorkoutSample: Identifiable, Codable, Equatable {
         targetPowerWatts: Int?,
         targetCadenceRPM: Int?,
         targetHeartRateBPM: Int?,
-        stepIndex: Int?
+        stepIndex: Int?,
+        latitude: Double? = nil,
+        longitude: Double? = nil,
+        altitudeMeters: Double? = nil,
+        distanceMeters: Double? = nil,
+        speedMetersPerSecond: Double? = nil
     ) {
         self.id = id
         self.timestamp = timestamp
@@ -249,6 +259,11 @@ struct WorkoutSample: Identifiable, Codable, Equatable {
         self.targetCadenceRPM = targetCadenceRPM
         self.targetHeartRateBPM = targetHeartRateBPM
         self.stepIndex = stepIndex
+        self.latitude = latitude
+        self.longitude = longitude
+        self.altitudeMeters = altitudeMeters
+        self.distanceMeters = distanceMeters
+        self.speedMetersPerSecond = speedMetersPerSecond
     }
 }
 

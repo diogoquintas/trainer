@@ -14,6 +14,10 @@ final class WorkoutEngine: ObservableObject {
     @Published private(set) var currentResistanceLevel: Double?
     @Published private(set) var currentVirtualGear: Int
     @Published private(set) var isERGControlActive = false
+    @Published private(set) var virtualRoute: VirtualRoute?
+    @Published private(set) var virtualRouteDistanceMeters: Double = 0
+    @Published private(set) var currentVirtualRouteLocation: VirtualRouteLocation?
+    @Published private(set) var currentVirtualSpeedMetersPerSecond: Double = 0
 
     let workout: Workout
     static let virtualGearRange = 1...10
@@ -34,6 +38,8 @@ final class WorkoutEngine: ObservableObject {
     private var nextRecordingElapsed: TimeInterval = 0
     private var firedTextEventIDs = Set<WorkoutTextEvent.ID>()
     private var warnedStepIndices = Set<Int>()
+    private var riderWeightKg: Double
+    private var trainerDifficultyPercent: Int
 
     init(
         workout: Workout,
@@ -42,7 +48,9 @@ final class WorkoutEngine: ObservableObject {
         recorder: DataRecording,
         notifier: WorkoutNotifying,
         trainerControlMode: TrainerControlMode = .erg,
-        manualVirtualGear: Int = 3
+        manualVirtualGear: Int = 3,
+        athleteProfile: AthleteProfile = AthleteProfile(),
+        virtualRoute: VirtualRoute? = nil
     ) {
         self.workout = workout
         self.trainerService = trainerService
@@ -52,6 +60,10 @@ final class WorkoutEngine: ObservableObject {
         self.trainerControlMode = trainerControlMode
         self.manualVirtualGear = manualVirtualGear.clamped(to: Self.virtualGearRange)
         self.currentVirtualGear = manualVirtualGear.clamped(to: Self.virtualGearRange)
+        self.riderWeightKg = athleteProfile.weightKg
+        self.trainerDifficultyPercent = athleteProfile.trainerDifficultyPercent
+        self.virtualRoute = virtualRoute
+        self.currentVirtualRouteLocation = virtualRoute?.location(at: 0)
         updateStep(for: 0, forceERGUpdate: true)
     }
 
@@ -73,6 +85,7 @@ final class WorkoutEngine: ObservableObject {
         samples = []
         chartSamples = []
         elapsed = 0
+        resetVirtualRouteProgress()
         state = .running
         lastTrainerCommand = nil
         isERGControlActive = false
@@ -103,6 +116,7 @@ final class WorkoutEngine: ObservableObject {
         elapsed = 0
         currentStepIndex = nil
         isERGControlActive = false
+        resetVirtualRouteProgress()
         cancelTasks()
         Task {
             await trainerService.stop()
@@ -120,6 +134,21 @@ final class WorkoutEngine: ObservableObject {
             await heartRateService.stop()
             try? await trainerService.releaseControl()
         }
+    }
+
+    func replaceVirtualRoute(_ route: VirtualRoute?) {
+        virtualRoute = route
+        resetVirtualRouteProgress()
+        lastTrainerCommand = nil
+        updateStep(for: elapsed, forceERGUpdate: true)
+    }
+
+    func updateAthleteProfile(_ profile: AthleteProfile) {
+        let sanitized = profile.sanitized
+        riderWeightKg = sanitized.weightKg
+        trainerDifficultyPercent = sanitized.trainerDifficultyPercent
+        lastTrainerCommand = nil
+        updateStep(for: elapsed, forceERGUpdate: true)
     }
 
     func exportJSON() throws -> Data {
@@ -246,6 +275,7 @@ final class WorkoutEngine: ObservableObject {
         }
 
         updateStep(for: elapsed)
+        updateVirtualRouteProgress(deltaTime: engineInterval)
         sendDueNotifications(previousElapsed: previousElapsed)
         appendChartSample()
         recordSampleIfNeeded()
@@ -301,7 +331,7 @@ final class WorkoutEngine: ObservableObject {
         case .erg:
             guard isERGControlActive else { return nil }
             guard let targetWatts = currentTarget.resolvedPowerWatts(ftp: workout.ftp) else { return nil }
-            return .erg(targetWatts)
+            return .erg(gradeAdjustedERGTarget(from: targetWatts))
         case .resistance:
             return .resistance(resistanceLevel(for: manualVirtualGear))
         case .off:
@@ -324,6 +354,75 @@ final class WorkoutEngine: ObservableObject {
 
     private func resistanceLevel(for gear: Int) -> Double {
         Double(gear.clamped(to: Self.virtualGearRange) - Self.virtualGearRange.lowerBound) * 2
+    }
+
+    private func resetVirtualRouteProgress() {
+        virtualRouteDistanceMeters = 0
+        currentVirtualSpeedMetersPerSecond = 0
+        currentVirtualRouteLocation = virtualRoute?.location(at: 0)
+    }
+
+    private func updateVirtualRouteProgress(deltaTime: TimeInterval) {
+        guard let virtualRoute, virtualRoute.totalDistanceMeters > 0 else {
+            currentVirtualSpeedMetersPerSecond = 0
+            currentVirtualRouteLocation = nil
+            return
+        }
+
+        let grade = currentVirtualRouteLocation?.grade ?? 0
+        let powerWatts = Double(
+            latestTrainerReading.powerWatts
+                ?? currentTarget.resolvedPowerWatts(ftp: workout.ftp)
+                ?? 0
+        )
+        let speed = virtualSpeedMetersPerSecond(powerWatts: powerWatts, grade: grade)
+        currentVirtualSpeedMetersPerSecond = speed
+        virtualRouteDistanceMeters = min(virtualRoute.totalDistanceMeters, virtualRouteDistanceMeters + speed * deltaTime)
+        currentVirtualRouteLocation = virtualRoute.location(at: virtualRouteDistanceMeters)
+    }
+
+    private func gradeAdjustedERGTarget(from targetWatts: Int) -> Int {
+        guard let grade = currentVirtualRouteLocation?.grade else { return targetWatts }
+
+        let gradeLoad = gradeLoadWatts(for: grade)
+        return Int((Double(targetWatts) + gradeLoad).rounded()).clamped(to: 50...800)
+    }
+
+    private func gradeLoadWatts(for grade: Double) -> Double {
+        let difficulty = Double(trainerDifficultyPercent.clamped(to: 0...100)) / 100
+        let systemMassKg = max(40, riderWeightKg + 10)
+        let referenceSpeed = max(4, currentVirtualSpeedMetersPerSecond)
+        return systemMassKg * 9.80665 * grade * referenceSpeed * difficulty
+    }
+
+    private func virtualSpeedMetersPerSecond(powerWatts: Double, grade: Double) -> Double {
+        guard powerWatts > 0 else { return grade < -0.02 ? 2.5 : 0 }
+
+        let systemMassKg = max(40, riderWeightKg + 10)
+        let rollingResistanceCoefficient = 0.005
+        let airDensity = 1.225
+        let dragArea = 0.32
+        let drivetrainEfficiency = 0.97
+        let effectivePower = powerWatts * drivetrainEfficiency
+
+        var low = 0.0
+        var high = 28.0
+
+        for _ in 0..<32 {
+            let speed = (low + high) / 2
+            let rollingForce = systemMassKg * 9.80665 * rollingResistanceCoefficient
+            let climbingForce = systemMassKg * 9.80665 * grade
+            let aerodynamicForce = 0.5 * airDensity * dragArea * speed * speed
+            let requiredPower = max(0, rollingForce + climbingForce + aerodynamicForce) * speed
+
+            if requiredPower > effectivePower {
+                high = speed
+            } else {
+                low = speed
+            }
+        }
+
+        return low
     }
 
     private func updateERGControlReadiness(for reading: TrainerReading) {
@@ -368,7 +467,12 @@ final class WorkoutEngine: ObservableObject {
             targetPowerWatts: currentTarget.resolvedPowerWatts(ftp: workout.ftp),
             targetCadenceRPM: currentTarget.cadenceRPM,
             targetHeartRateBPM: currentTarget.heartRateBPM,
-            stepIndex: currentStepIndex
+            stepIndex: currentStepIndex,
+            latitude: currentVirtualRouteLocation?.coordinate.latitude,
+            longitude: currentVirtualRouteLocation?.coordinate.longitude,
+            altitudeMeters: currentVirtualRouteLocation?.elevationMeters,
+            distanceMeters: currentVirtualRouteLocation?.distanceMeters,
+            speedMetersPerSecond: currentVirtualRouteLocation == nil ? nil : currentVirtualSpeedMetersPerSecond
         )
     }
 
